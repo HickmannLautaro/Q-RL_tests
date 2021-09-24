@@ -1,0 +1,23 @@
+Ñê;¿i–‰=âÉG@;?Éþø>š„ˆ>Î•À¶@À¾ôµ?ªåÙ?îö¾€”Ê>±ª–Àë¦r@êÀ+À,§©>JiŽ?øü>ØƒÌ¼®¾§qj@ýÛ6ÀîV‡?²¥T?Ói¢?`‚	Á·‰Aõ*Áß?˜t6?êÁ?Iø¶@JÎÀñ¬AúiÁ¡(š¿œÔ¿?!F
+¼èîdÀ…b]@Ô-?À¤J?cU[?[6?{R?6-¹¿"øF@8{Àœ÷±¾9¹ð>¨eS?õ-i¾B8€¿ÀOgƒ@$÷w@’Q~@ôÌñ>´}¿¹²E¿'Cÿ¿o.@Ô°}@Çºy@j”ÖÀmþÁbiÃÀùÌÐÀ­šÀ÷ëÙÀ('@:%@›,@­7,@pä	@¿Â,@ÿóàÀÝâÂÀ¸á’ÀB®µÀœaÃÀù«ŸÀ¸ÛÄÀq²¶ÀØy@}¥@l÷?ˆI>@E=@Ðx9@•j!@– @èZU›
+N
+layer_with_weights-0
+layer-0
+layer_with_weights-1
+layer-1
+
+
+kernel
+bias
+
+
+kernel
+bias
+ZX
+VARIABLE_VALUEdense_2/kernel6layer_with_weights-0/kernel/.ATTRIBUTES/VARIABLE_VALUE
+VT
+VARIABLE_VALUEdense_2/bias4layer_with_weights-0/bias/.ATTRIBUTES/VARIABLE_VALUE
+ZX
+VARIABLE_VALUEdense_3/kernel6layer_with_weights-1/kernel/.ATTRIBUTES/VARIABLE_VALUE
+VT
+VARIABLE_VALUEdense_3/bias4layer_with_weights-1/bias/.ATTRIBUTES/VARIABLE_VALUE
