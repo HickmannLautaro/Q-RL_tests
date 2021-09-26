@@ -240,6 +240,10 @@ def main():
         observables = [ops[0], ops[1]*ops[2] * ops[3]]
     elif arguments['observables'] == 1:
         observables = [ops[0], ops[3]]
+    elif arguments['observables'] == 4:
+        observables = [ops[0], ops[2]]
+    elif arguments['observables'] == 5:
+        observables =  [ops[0] * ops[2], ops[1] * ops[3]]
     else:
         sys.exit("No observables declared")
     model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False, arguments["repetitions"])
