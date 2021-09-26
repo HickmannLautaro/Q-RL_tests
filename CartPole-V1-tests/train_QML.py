@@ -1,4 +1,5 @@
 import argparse
+import sys
 from collections import deque
 
 import cirq
@@ -233,8 +234,14 @@ def main():
     ops = [cirq.Z(q) for q in qubits]
     if arguments['observables'] ==2:
         observables = [ops[0] * ops[1], ops[2] * ops[3]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
-    else:
+    elif arguments['observables'] ==0:
+        observables = [ops[0], ops[0]]
+    elif arguments['observables'] ==3:
+        observables = [ops[0], ops[1]*ops[2] * ops[3]]
+    elif arguments['observables'] == 1:
         observables = [ops[0], ops[3]]
+    else:
+        sys.exit("No observables declared")
     model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False, arguments["repetitions"])
     model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True, arguments["repetitions"])
     model_target.set_weights(model.get_weights())
