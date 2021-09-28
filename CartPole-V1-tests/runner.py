@@ -8,6 +8,8 @@ def main():
     parser.add_argument('--model', type=str, default="Small", help="")
     parser.add_argument('--loss', type=str, default="mse", help="")
     parser.add_argument('--observables', type=int, help="")
+    parser.add_argument('--source', type=str, default="TFQ", help="From which textual source the circuit was copied")
+
 
 
 
@@ -16,7 +18,7 @@ def main():
     if arguments['model'] == 'QML':
         script ='train_QML.py'
         for i in range(1,11):
-            os.system(f"python {script} --run {i} --loss {arguments['loss']} --observables {arguments['observables']}")
+            os.system(f"python {script} --run {i} --loss {arguments['loss']} --observables {arguments['observables']} --source {arguments['source']}")
     else:
         script ='train_classic.py'
         for i in range(1,11):

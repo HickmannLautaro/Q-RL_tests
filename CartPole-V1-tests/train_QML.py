@@ -20,6 +20,7 @@ def get_parsed(text=None):
     parser.add_argument('--repetitions', type=int, default=None, help="")
     parser.add_argument('--loss', type=str, default="mse")
     parser.add_argument('--observables', type=int, help="")
+    parser.add_argument('--source', type=str, default="TFQ", help="From which textual source the circuit was copied")
 
     if text is not None:
         arguments = vars(parser.parse_args(text))
@@ -37,6 +38,15 @@ def one_qubit_rotation(qubit, symbols):
     return [cirq.rx(symbols[0])(qubit),
             cirq.ry(symbols[1])(qubit),
             cirq.rz(symbols[2])(qubit)]
+
+
+def one_qubit_rotation_paper(qubit, symbols):
+    """
+    Returns Cirq gates that apply a rotation of the bloch sphere about the X,
+    Y and Z axis, specified by the values in `symbols`.
+    """
+    return [cirq.ry(symbols[0])(qubit),
+            cirq.rz(symbols[1])(qubit)]
 
 
 def generate_circuit(qubits, n_layers):
@@ -67,6 +77,38 @@ def generate_circuit(qubits, n_layers):
     return circuit, list(params.flat), list(inputs.flat)
 
 
+def generate_circuit_paper(qubits, n_layers):
+    """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
+    # Number of qubits
+    n_qubits = len(qubits)
+
+    # Sympy symbols for variational angles
+    params = sympy.symbols(f'theta(0:{2 * (n_layers) * n_qubits})')
+    params = np.asarray(params).reshape((n_layers, n_qubits, 2))
+
+    # Sympy symbols for encoding angles
+    inputs = sympy.symbols(f'x(0:{n_qubits})' + f'(0:{n_layers})')
+    inputs = np.asarray(inputs).reshape((n_layers, n_qubits))
+
+    # Sympy symbols for post rotation angles
+    params_final = sympy.symbols(f'theta_end(0:{2 * n_qubits})')
+    params_final = np.asarray(params_final).reshape((1, n_qubits, 2))
+
+    # Define circuit
+    circuit = cirq.Circuit()
+    for l in range(n_layers):
+        # Encoding layer
+        circuit += cirq.Circuit(cirq.rx(inputs[l, i])(q) for i, q in enumerate(qubits))
+        # Variational layer
+        circuit += cirq.Circuit(one_qubit_rotation_paper(q, params[l, i]) for i, q in enumerate(qubits))
+        circuit += entangling_layer(qubits)
+
+    # Last varitional layer
+    circuit += cirq.Circuit(one_qubit_rotation_paper(q, params_final[0, i]) for i, q in enumerate(qubits))
+
+    return circuit, list(params.flat), list(inputs.flat), list(params_final.flat)
+
+
 def entangling_layer(qubits):
     """
     Returns a layer of CZ entangling gates on `qubits` (arranged in a circular topology).
@@ -86,12 +128,17 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         by the ControlledPQC.
     """
 
-    def __init__(self, qubits, n_layers, observables, repetitions, activation="linear", name="re-uploading_PQC"):
+    def __init__(self, qubits, n_layers, observables, repetitions, source="TFQ", activation="linear", name="re-uploading_PQC"):
         super(ReUploadingPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
-
-        circuit, theta_symbols, input_symbols = generate_circuit(qubits, n_layers)
+        if source == "Paper":
+            circuit, theta_symbols, input_symbols, final_vals = generate_circuit_paper(qubits, n_layers)
+            init_val = tf.constant([-np.pi / 2, -np.pi / 2, -np.pi / 2, -np.pi / 2, np.pi / 2, np.pi / 2, np.pi / 2, np.pi / 2], dtype="float32", shape=(1, self.n_qubits * 2))
+            self.final_vals_var = tf.Variable(initial_value=init_val, dtype="float32", shape=(1, len(final_vals)), trainable=False, name="Post rotation")
+            self.source = "Paper"
+        else:
+            circuit, theta_symbols, input_symbols = generate_circuit(qubits, n_layers)
 
         theta_init = tf.random_uniform_initializer(minval=0.0, maxval=np.pi)
         self.theta = tf.Variable(
@@ -105,12 +152,17 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         )
 
         # Define explicit symbol order.
-        symbols = [str(symb) for symb in theta_symbols + input_symbols]
-        self.indices = tf.constant([sorted(symbols).index(a) for a in symbols])
+        if source == "Paper":
+            symbols = [str(symb) for symb in theta_symbols + input_symbols + final_vals]
+        else:
+            symbols = [str(symb) for symb in theta_symbols + input_symbols]
 
+        self.indices = tf.constant([sorted(symbols).index(a) for a in symbols])
         self.activation = activation
         self.empty_circuit = tfq.convert_to_tensor([cirq.Circuit()])
+
         self.computation_layer = tfq.layers.ControlledPQC(circuit, observables, repetitions=repetitions)
+
 
     def call(self, inputs):
         # inputs[0] = encoding data for the state.
@@ -121,7 +173,11 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         scaled_inputs = tf.einsum("i,ji->ji", self.lmbd, tiled_up_inputs)
         squashed_inputs = tf.keras.layers.Activation(self.activation)(scaled_inputs)
 
-        joined_vars = tf.concat([tiled_up_thetas, squashed_inputs], axis=1)
+        if self.source == "Paper":
+            tiled_up_final_vals_var = tf.tile(self.final_vals_var, multiples=[batch_dim, 1])
+            joined_vars = tf.concat([tiled_up_thetas, squashed_inputs, tiled_up_final_vals_var], axis=1)
+        else:
+            joined_vars = tf.concat([tiled_up_thetas, squashed_inputs], axis=1)
         joined_vars = tf.gather(joined_vars, self.indices, axis=1)
 
         return self.computation_layer([tiled_up_circuits, joined_vars])
@@ -139,11 +195,11 @@ class Rescaling(tf.keras.layers.Layer):
         return tf.math.multiply((inputs + 1) / 2, tf.repeat(self.w, repeats=tf.shape(inputs)[0], axis=0))
 
 
-def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target, reps):
+def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target, reps, source):
     """Generates a Keras model for a data re-uploading PQC Q-function approximator."""
 
     input_tensor = tf.keras.Input(shape=(len(qubits),), dtype=tf.dtypes.float32, name='input')
-    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, repetitions=reps, activation='tanh')([input_tensor])
+    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, source=source, repetitions=reps, activation='tanh')([input_tensor])
     process = tf.keras.Sequential([Rescaling(len(observables))], name=target * "Target" + "Q-values")
     Q_values = process(re_uploading_pqc)
     model = tf.keras.Model(inputs=[input_tensor], outputs=Q_values)
@@ -173,7 +229,7 @@ def interact_env(state, model, epsilon, n_actions, env):
     return interaction
 
 
-@tf.function
+# @tf.function
 def Q_learning_update(states, actions, rewards, next_states, done, model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out, loss_name):
     states = tf.convert_to_tensor(states)
     actions = tf.convert_to_tensor(actions)
@@ -217,7 +273,7 @@ def main():
     else:
         group = "QML-Simulated_v2"
     loss_name = arguments['loss']
-    group = group + "_" + loss_name+"_obs_"+str(arguments["observables"])
+    group = group + "_" + loss_name + "_obs_" + str(arguments["observables"])
 
     name = "run-" + str(arguments["run"])
     run = wandb.init(project=project,
@@ -232,22 +288,23 @@ def main():
 
     qubits = cirq.GridQubit.rect(1, n_qubits)
     ops = [cirq.Z(q) for q in qubits]
-    if arguments['observables'] ==2:
+    if arguments['observables'] == 2:
         observables = [ops[0] * ops[1], ops[2] * ops[3]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
-    elif arguments['observables'] ==0:
+    elif arguments['observables'] == 0:
         observables = [ops[0], ops[0]]
-    elif arguments['observables'] ==3:
-        observables = [ops[0], ops[1]*ops[2] * ops[3]]
+    elif arguments['observables'] == 3:
+        observables = [ops[0], ops[1] * ops[2] * ops[3]]
     elif arguments['observables'] == 1:
         observables = [ops[0], ops[3]]
     elif arguments['observables'] == 4:
         observables = [ops[0], ops[2]]
     elif arguments['observables'] == 5:
-        observables =  [ops[0] * ops[2], ops[1] * ops[3]]
+        observables = [ops[0] * ops[2], ops[1] * ops[3]]
     else:
         sys.exit("No observables declared")
-    model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False, arguments["repetitions"])
-    model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True, arguments["repetitions"])
+
+    model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False, arguments["repetitions"], arguments['source'])
+    model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True, arguments["repetitions"], arguments['source'])
     model_target.set_weights(model.get_weights())
     print(model_target.summary())
     gamma = 0.99
