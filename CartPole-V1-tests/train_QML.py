@@ -272,6 +272,10 @@ def main():
         group = "QML-Analytical_v2"
     else:
         group = "QML-Simulated_v2"
+
+    if arguments['source'] == "Paper":
+        group = "Paper_" + group
+
     loss_name = arguments['loss']
     group = group + "_" + loss_name + "_obs_" + str(arguments["observables"])
 
