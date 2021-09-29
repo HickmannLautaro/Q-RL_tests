@@ -1,33 +1,17 @@
-import argparse
+import os
 import sys
 from collections import deque
 
 import cirq
-import gym
-import numpy as np
 import sympy
 import tensorflow as tf
-
 from tqdm import trange
 
-import wandb
-import os
-
-
-def get_parsed(text=None):
-    parser = argparse.ArgumentParser(description="Define and run the experiment with one config")
-    parser.add_argument('--run', type=int, help="")
-    parser.add_argument('--repetitions', type=int, default=None, help="")
-    parser.add_argument('--loss', type=str, default="mse")
-    parser.add_argument('--observables', type=int, help="")
-    parser.add_argument('--source', type=str, default="TFQ", help="From which textual source the circuit was copied")
-
-    if text is not None:
-        arguments = vars(parser.parse_args(text))
-    else:
-        arguments = vars(parser.parse_args())
-
-    return arguments
+sys.path.insert(0,'../PyGame-Learning-Environment/')
+from ple.games.catcher import Catcher
+from ple import PLE
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 def one_qubit_rotation(qubit, symbols):
@@ -77,37 +61,6 @@ def generate_circuit(qubits, n_layers):
     return circuit, list(params.flat), list(inputs.flat)
 
 
-def generate_circuit_paper(qubits, n_layers):
-    """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
-    # Number of qubits
-    n_qubits = len(qubits)
-
-    # Sympy symbols for variational angles
-    params = sympy.symbols(f'theta(0:{2 * (n_layers) * n_qubits})')
-    params = np.asarray(params).reshape((n_layers, n_qubits, 2))
-
-    # Sympy symbols for encoding angles
-    inputs = sympy.symbols(f'x(0:{n_qubits})' + f'(0:{n_layers})')
-    inputs = np.asarray(inputs).reshape((n_layers, n_qubits))
-
-    # Sympy symbols for post rotation angles
-    params_final = sympy.symbols(f'theta_end(0:{2 * n_qubits})')
-    params_final = np.asarray(params_final).reshape((1, n_qubits, 2))
-
-    # Define circuit
-    circuit = cirq.Circuit()
-    for l in range(n_layers):
-        # Encoding layer
-        circuit += cirq.Circuit(cirq.rx(inputs[l, i])(q) for i, q in enumerate(qubits))
-        # Variational layer
-        circuit += cirq.Circuit(one_qubit_rotation_paper(q, params[l, i]) for i, q in enumerate(qubits))
-        circuit += entangling_layer(qubits)
-
-    # Last varitional layer
-    circuit += cirq.Circuit(one_qubit_rotation_paper(q, params_final[0, i]) for i, q in enumerate(qubits))
-
-    return circuit, list(params.flat), list(inputs.flat), list(params_final.flat)
-
 
 def entangling_layer(qubits):
     """
@@ -128,17 +81,11 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         by the ControlledPQC.
     """
 
-    def __init__(self, qubits, n_layers, observables, repetitions, source="TFQ", activation="linear", name="re-uploading_PQC"):
+    def __init__(self, qubits, n_layers, observables, activation="linear", name="re-uploading_PQC"):
         super(ReUploadingPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
-        if source == "Paper":
-            circuit, theta_symbols, input_symbols, final_vals = generate_circuit_paper(qubits, n_layers)
-            init_val = tf.constant([-np.pi / 2, -np.pi / 2, -np.pi / 2, -np.pi / 2, np.pi / 2, np.pi / 2, np.pi / 2, np.pi / 2], dtype="float32", shape=(1, self.n_qubits * 2))
-            self.final_vals_var = tf.Variable(initial_value=init_val, dtype="float32", shape=(1, len(final_vals)), trainable=False, name="Post rotation")
-            self.source = "Paper"
-        else:
-            circuit, theta_symbols, input_symbols = generate_circuit(qubits, n_layers)
+        circuit, theta_symbols, input_symbols = generate_circuit(qubits, n_layers)
 
         theta_init = tf.random_uniform_initializer(minval=0.0, maxval=np.pi)
         self.theta = tf.Variable(
@@ -152,16 +99,13 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         )
 
         # Define explicit symbol order.
-        if source == "Paper":
-            symbols = [str(symb) for symb in theta_symbols + input_symbols + final_vals]
-        else:
-            symbols = [str(symb) for symb in theta_symbols + input_symbols]
+        symbols = [str(symb) for symb in theta_symbols + input_symbols]
 
         self.indices = tf.constant([sorted(symbols).index(a) for a in symbols])
         self.activation = activation
         self.empty_circuit = tfq.convert_to_tensor([cirq.Circuit()])
 
-        self.computation_layer = tfq.layers.ControlledPQC(circuit, observables, repetitions=repetitions)
+        self.computation_layer = tfq.layers.ControlledPQC(circuit, observables)
 
     def call(self, inputs):
         # inputs[0] = encoding data for the state.
@@ -171,12 +115,7 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         tiled_up_inputs = tf.tile(inputs[0], multiples=[1, self.n_layers])
         scaled_inputs = tf.einsum("i,ji->ji", self.lmbd, tiled_up_inputs)
         squashed_inputs = tf.keras.layers.Activation(self.activation)(scaled_inputs)
-
-        if self.source == "Paper":
-            tiled_up_final_vals_var = tf.tile(self.final_vals_var, multiples=[batch_dim, 1])
-            joined_vars = tf.concat([tiled_up_thetas, squashed_inputs, tiled_up_final_vals_var], axis=1)
-        else:
-            joined_vars = tf.concat([tiled_up_thetas, squashed_inputs], axis=1)
+        joined_vars = tf.concat([tiled_up_thetas, squashed_inputs], axis=1)
         joined_vars = tf.gather(joined_vars, self.indices, axis=1)
 
         return self.computation_layer([tiled_up_circuits, joined_vars])
@@ -194,11 +133,11 @@ class Rescaling(tf.keras.layers.Layer):
         return tf.math.multiply((inputs + 1) / 2, tf.repeat(self.w, repeats=tf.shape(inputs)[0], axis=0))
 
 
-def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target, reps, source):
+def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target):
     """Generates a Keras model for a data re-uploading PQC Q-function approximator."""
 
     input_tensor = tf.keras.Input(shape=(len(qubits),), dtype=tf.dtypes.float32, name='input')
-    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, source=source, repetitions=reps, activation='tanh')([input_tensor])
+    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='tanh')([input_tensor])
     process = tf.keras.Sequential([Rescaling(len(observables))], name=target * "Target" + "Q-values")
     Q_values = process(re_uploading_pqc)
     model = tf.keras.Model(inputs=[input_tensor], outputs=Q_values)
@@ -206,7 +145,7 @@ def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target, r
     return model
 
 
-def interact_env(state, model, epsilon, n_actions, env):
+def interact_env(state, model, epsilon, n_actions, p):
     # Preprocess state
     state_array = np.array(state)
     state = tf.convert_to_tensor([state_array])
@@ -219,8 +158,11 @@ def interact_env(state, model, epsilon, n_actions, env):
     else:
         action = np.random.choice(n_actions)
 
+    actions=[97, None, 100]
     # Apply sampled action in the environment, receive reward and next state
-    next_state, reward, done, _ = env.step(action)
+    reward = p.act(actions[action])
+    next_state = np.array(list(p.getGameState()[0]))
+    done = p.game_over()
 
     interaction = {'state': state_array, 'action': action, 'next_state': next_state.copy(),
                    'reward': reward, 'done': float(done)}
@@ -229,7 +171,7 @@ def interact_env(state, model, epsilon, n_actions, env):
 
 
 @tf.function
-def Q_learning_update(states, actions, rewards, next_states, done, model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out, loss_name):
+def Q_learning_update(states, actions, rewards, next_states, done, model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out):
     states = tf.convert_to_tensor(states)
     actions = tf.convert_to_tensor(actions)
     rewards = tf.convert_to_tensor(rewards)
@@ -247,10 +189,8 @@ def Q_learning_update(states, actions, rewards, next_states, done, model, model_
         tape.watch(model.trainable_variables)
         q_values = model([states])
         q_values_masked = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
-        if loss_name == 'mse':
-            loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)
-        else:
-            loss = tf.keras.losses.Huber()(target_q_values, q_values_masked)  # Original
+
+        loss = tf.keras.losses.Huber()(target_q_values, q_values_masked)  # Original
 
     # Backpropagation
     grads = tape.gradient(loss, model.trainable_variables)
@@ -258,6 +198,23 @@ def Q_learning_update(states, actions, rewards, next_states, done, model, model_
     for optimizer, w in zip([optimizer_in, optimizer_var, optimizer_out], [w_in, w_var, w_out]):
         optimizer.apply_gradients([(grads[w], model.trainable_variables[w])])
 
+def show_epopch(env, model):
+    actions = [97, None, 100]
+
+    env.reset_game()
+
+    while not env.game_over():
+        state = np.array(list(env.getGameState()[0]))
+
+        state_array = np.array(state)
+        state = tf.convert_to_tensor([state_array])
+
+        q_vals = model([state])
+        action = int(tf.argmax(q_vals[0]).numpy())
+        reward = env.act(actions[action])
+    print("Score: ", env.score())
+def process_state(state):
+        return np.array([ state.values() ])
 
 def main():
     physical_devices = tf.config.list_physical_devices('GPU')
@@ -265,51 +222,23 @@ def main():
     global tfq
     tfq = __import__('tensorflow_quantum', globals(), locals())
 
-    arguments = get_parsed()
 
-    project = "CartPole-V1"
-    if arguments['repetitions'] is None:
-        group = "QML-Analytical_v2"
-    else:
-        group = "QML-Simulated_v2"
+    name = "Run-1"
+    save_dir = os.path.join("Saves", name)
 
-    if arguments['source'] == "Paper":
-        group = "Paper_" + group
+    n_qubits = 3  # Dimension of the state vectors in CartPole     [player x position,   fruits x position,   fruits y position]
 
-    loss_name = arguments['loss']
-    group = group + "_" + loss_name + "_obs_" + str(arguments["observables"])
-
-    name = "run-" + str(arguments["run"])
-    run = wandb.init(project=project,
-                     group=group,
-                     name=group + "_" + name,
-                     config=arguments)
-
-    save_dir = os.path.join(project, group, name)
-
-    n_qubits = 4  # Dimension of the state vectors in CartPole
     n_layers = 5  # Number of layers in the PQC
-    n_actions = 2  # Number of actions in CartPole
+    n_actions = 3  # Number of actions in CartPole
 
     qubits = cirq.GridQubit.rect(1, n_qubits)
     ops = [cirq.Z(q) for q in qubits]
-    if arguments['observables'] == 2:
-        observables = [ops[0] * ops[1], ops[2] * ops[3]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
-    elif arguments['observables'] == 0:
-        observables = [ops[0], ops[0]]
-    elif arguments['observables'] == 3:
-        observables = [ops[0], ops[1] * ops[2] * ops[3]]
-    elif arguments['observables'] == 1:
-        observables = [ops[0], ops[3]]
-    elif arguments['observables'] == 4:
-        observables = [ops[0], ops[2]]
-    elif arguments['observables'] == 5:
-        observables = [ops[0] * ops[2], ops[1] * ops[3]]
-    else:
-        sys.exit("No observables declared")
 
-    model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False, arguments["repetitions"], arguments['source'])
-    model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True, arguments["repetitions"], arguments['source'])
+    observables = [ops[0], ops[1], ops[2]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
+
+
+    model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False)
+    model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True)
     model_target.set_weights(model.get_weights())
 
     print(model_target.summary())
@@ -334,19 +263,26 @@ def main():
     # Assign the model parameters to each optimizer
     w_in, w_var, w_out = 1, 0, 2
 
-    env = gym.make("CartPole-v1")
+    game = Catcher(width=512, height=512, init_lives=3)
+    p = PLE(game, display_screen=True, state_preprocessor=process_state)
+    env = PLE(game, display_screen=True, state_preprocessor=process_state, force_fps=False, fps=300)
 
     episode_reward_history = []
+    episode_score_history = []
+
+    steps_per_ep_history = []
     step_count = 0
     avg_rewards_100 = 0
     t = trange(n_episodes, desc='Training', leave=True)
 
     for episode in t:
         episode_reward = 0
-        state = env.reset()
-        for step in range(200):
+        p.reset_game()
+        state = np.array(list(p.getGameState()[0]))
+        steps_in_episode = 0
+        for step in range(300):
             # Interact with env
-            interaction = interact_env(state, model, epsilon, n_actions, env)
+            interaction = interact_env(state, model, epsilon, n_actions, p)
 
             # Store interaction in the replay memory
             replay_memory.append(interaction)
@@ -354,6 +290,7 @@ def main():
             state = interaction['next_state']
             episode_reward += interaction['reward']
             step_count += 1
+            steps_in_episode+=1
 
             # Update model
             if step_count % steps_per_update == 0:
@@ -364,7 +301,7 @@ def main():
                                   np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
                                   np.asarray([x['next_state'] for x in training_batch]),
                                   np.asarray([x['done'] for x in training_batch], dtype=np.float32),
-                                  model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out, loss_name)
+                                  model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
 
             # Update target model
             if step_count % steps_per_target_update == 0:
@@ -373,35 +310,37 @@ def main():
             # Check if the episode is finished
             if interaction['done']:
                 break
-
+        if episode % 100 ==0:
+            show_epopch(env, model_target)
         # Decay epsilon
         epsilon = max(epsilon * decay_epsilon, epsilon_min)
         episode_reward_history.append(episode_reward)
-        wandb.log({'episode_reward': episode_reward}, step=step_count)
+        episode_score_history.append(p.score())
+        steps_per_ep_history.append(steps_in_episode)
+        avg_rewards = np.mean(episode_reward_history[-10:])
 
-        if (episode + 1) % 10 == 0:
-            avg_rewards = np.mean(episode_reward_history[-10:])
-            wandb.log({'episode_reward_avg_last_10': avg_rewards, 'episode': episode + 1}, step=step_count)
-            t.set_description("Episode {}/{}, avg 10 rew {}, avg 100 rew {}".format(episode + 1, n_episodes, avg_rewards, avg_rewards_100))
-            t.refresh()  # to show immediately the update
 
-        if (episode + 1) % 100 == 0:
-            avg_rewards_100 = np.mean(episode_reward_history[-100:])
-            wandb.log({'episode_reward_avg_last_100': avg_rewards_100, 'episode': episode + 1}, step=step_count)
-            t.set_description("Episode {}/{}, avg 10 rew {}, avg 100 rew {}".format(episode + 1, n_episodes, avg_rewards, avg_rewards_100))
-            t.refresh()  # to show immediately the update
-            if avg_rewards_100 >= 195.0:  # 500.0
-                break
-    try:
-        os.makedirs(save_dir)
-    except OSError:
-        print(" %s already exists or error" % save_dir)
-    else:
-        print("Successfully created the directory %s " % save_dir)
+        avg_rewards_100 = np.mean(episode_reward_history[-100:])
+        t.set_description("Episode {}/{}, steps in ep {}, score {}, avg 10 rew {}, avg 100 rew {:.2f}".format(episode + 1, n_episodes, steps_in_episode, p.score(), avg_rewards, avg_rewards_100))
+        t.refresh()  # to show immediately the update
 
-    model_target.save_weights(save_dir + "/")
-    run.finish()
-
+    # try:
+    #     os.makedirs(save_dir)
+    # except OSError:
+    #     print(" %s already exists or error" % save_dir)
+    # else:
+    #     print("Successfully created the directory %s " % save_dir)
+    #
+    # model_target.save_weights(save_dir + "/")
+    plt.plot(episode_score_history)
+    plt.title("Score per trial")
+    plt.show()
+    plt.plot(episode_reward_history)
+    plt.title("Reward per trial")
+    plt.show()
+    plt.title("Steps per trial")
+    plt.plot(steps_per_ep_history)
+    plt.show()
 
 if __name__ == "__main__":
     main()
