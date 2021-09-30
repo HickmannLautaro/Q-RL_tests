@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from train_QML_catcher import interact_env
+from PIL import Image
 
 
 @tf.function
@@ -61,14 +62,24 @@ def generate_model(layers, n_state, n_actions):
 def process_state(state):
     return np.array([state.values()])
 
-def show_epopch(env, model, epsilon,n_actions, steps_target_per_episode):
+def show_epopch(env, model, epsilon,n_actions, steps_target_per_episode,episode, save = False):
     actions = [97, None, 100]
 
     env.reset_game()
     print("\n")
+    img = Image.new("RGB", (512, 512), (120, 120, 120))
+    frames = []
+    frames.append(img)
+    frames.append(img)
+    frames.append(img)
+
     for step in range(steps_target_per_episode+1):
 
         state = np.array(list(env.getGameState()[0]))
+        if save:
+
+            observation = Image.fromarray(env.getScreenRGB()).rotate(-90)
+            frames.append(observation)
 
         state_array = np.array(state)
 
@@ -91,6 +102,8 @@ def show_epopch(env, model, epsilon,n_actions, steps_target_per_episode):
         if env.game_over():
             break
     print("Score: ", env.score(),"\n")
+    if save:
+        frames[1].save(f"./Saves/Simplified_catcher_epsiode_{episode}_steps_{step}.gif", save_all=True, append_images=frames[2:], optimize=False, duration=step*10, loop=0)
 
 
 def main():
@@ -136,7 +149,6 @@ def main():
     steps_per_ep_history = []
 
     step_count = 0
-    avg_rewards_100 = -100
     t = trange(n_episodes, desc='Training', leave=True)
 
     for episode in t:
@@ -176,18 +188,21 @@ def main():
             if interaction['done']:
                 break
         if episode % 1000 ==0:
-            show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode)
+            if episode ==0:
+                show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode,episode, True)
+            else:
+                show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode,episode)
         # Decay epsilon
         epsilon = max(epsilon * decay_epsilon, epsilon_min)
         episode_reward_history.append(episode_reward)
         episode_score_history.append(p.score())
         steps_per_ep_history.append(steps_in_episode)
-        avg_rewards = np.mean(episode_reward_history[-10:])
+        avg_rewards = np.mean(episode_reward_history[-100:])
 
-        avg_rewards_100 = np.mean(episode_reward_history[-100:])
-        t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 10 rew {:04.2f}, avg 100 rew {:04.2f}".format(episode + 1, n_episodes, steps_in_episode, p.score(), avg_rewards, avg_rewards_100))
+        avg_rewards_200 = np.mean(episode_reward_history[-200:])
+        t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 100 rew {:04.2f}, avg 200 rew {:04.2f}".format(episode + 1, n_episodes, steps_in_episode, p.score(), avg_rewards, avg_rewards_200))
         t.refresh()  # to show immediately the update
-        if avg_rewards_100 > (steps_target_per_episode//5 )*.96:
+        if avg_rewards_200 > (steps_target_per_episode//5 )*.95:
             break
 
     plt.plot(episode_score_history)
@@ -199,7 +214,7 @@ def main():
     plt.title("Steps per trial")
     plt.plot(steps_per_ep_history)
     plt.show()
-
+    show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode,episode, True)
     try:
         os.makedirs(save_dir)
     except OSError:
@@ -207,7 +222,7 @@ def main():
     else:
         print("Successfully created the directory %s " % save_dir)
 
-    model_target.save_weights(save_dir + "/")
+    model_target.save_weights(save_dir + "/target_weights")
 
 
 if __name__ == "__main__":
