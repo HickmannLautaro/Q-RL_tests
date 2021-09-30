@@ -112,7 +112,7 @@ class Fruit(pygame.sprite.Sprite):
 
         buckets = self.SCREEN_WIDTH//3
 
-        x = self.rng.choice([buckets*0.5,buckets*1.5,buckets*2.5])
+        x = self.rng.choice([buckets*0.5,buckets*1.5,buckets*2.5]) - self.size//2
         y = 0
         # y = self.rng.choice(
         #     range(
@@ -227,8 +227,8 @@ class Catcher(base.PyGameWrapper):
 
 
         state = {
-            "player_x": self.player.rect.center[0],
-            "fruit_x": self.fruit.rect.center[0],
+            "player_x": self.player.rect.center[0] + self.player.width//2,
+            "fruit_x": self.fruit.rect.center[0] + self.fruit.size//2,
             "fruit_y": np.maximum(0,self.fruit.rect.center[1])
         }
 
