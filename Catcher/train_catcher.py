@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-import time
 from collections import deque
 from datetime import timedelta
 
@@ -14,11 +13,34 @@ sys.path.insert(0, '../PyGame-Learning-Environment/')
 from ple.games.catcher_discrete import Catcher
 from ple import PLE
 import numpy as np
-import matplotlib.pyplot as plt
 
-from train_QML_catcher import interact_env
 from PIL import Image
 import wandb
+
+
+def interact_env(state, model, epsilon, n_actions, p):
+    # Preprocess state
+    state_array = np.array(state)
+    state = tf.convert_to_tensor([state_array])
+
+    # Sample action
+    coin = np.random.random()
+    if coin > epsilon:
+        q_vals = model([state])
+        action = int(tf.argmax(q_vals[0]).numpy())
+    else:
+        action = np.random.choice(n_actions)
+
+    actions = [97, None, 100]
+    # Apply sampled action in the environment, receive reward and next state
+    reward = p.act(actions[action])
+    next_state = np.array(list(p.getGameState()[0]))
+    done = p.game_over()
+
+    interaction = {'state': state_array, 'action': action, 'next_state': next_state.copy(),
+                   'reward': reward, 'done': float(done)}
+
+    return interaction
 
 
 @tf.function
@@ -40,12 +62,13 @@ def Q_learning_update_classic(states, actions, rewards, next_states, done, model
         tape.watch(model.trainable_variables)
         q_values = model([states])
         q_values_masked = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
-        loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)  # With huber it completly breaks.
+        loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)
 
     # Backpropagation
     grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return grads
+
 
 @tf.function
 def Q_learning_update_quantum(states, actions, rewards, next_states, done, model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out):
@@ -68,13 +91,15 @@ def Q_learning_update_quantum(states, actions, rewards, next_states, done, model
         q_values_masked = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
 
         loss = tf.keras.losses.Huber()(target_q_values, q_values_masked)  # Original
+        #loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)
 
-    # Backpropagation
+        # Backpropagation
     grads = tape.gradient(loss, model.trainable_variables)
 
     for optimizer, w in zip([optimizer_in, optimizer_var, optimizer_out], [w_in, w_var, w_out]):
         optimizer.apply_gradients([(grads[w], model.trainable_variables[w])])
     return grads
+
 
 def generate_circuit(qubits, n_layers):
     """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
@@ -189,7 +214,7 @@ def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target):
     """Generates a Keras model for a data re-uploading PQC Q-function approximator."""
 
     input_tensor = tf.keras.Input(shape=(len(qubits),), dtype=tf.dtypes.float32, name='input')
-    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='tanh')([input_tensor])
+    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='linear')([input_tensor])
     process = tf.keras.Sequential([Rescaling(len(observables))], name=target * "Target" + "Q-values")
     Q_values = process(re_uploading_pqc)
     model = tf.keras.Model(inputs=[input_tensor], outputs=Q_values)
@@ -316,7 +341,7 @@ def main():
     name = f"Run-{arguments['run']}"
     project = "Catcher-Simplified"
     if Quantum:
-        arg_mod = "Quantum_v1"
+        arg_mod = "Quantum_v7"
         type = "quantum"
         global tfq
         tfq = __import__('tensorflow_quantum', globals(), locals())
@@ -346,16 +371,23 @@ def main():
 
     if Quantum:
         n_qubits = 3  # Dimension of the state vectors in CartPole     [player x position,   fruits x position,   fruits y position]
-        n_layers = 5  # Number of layers in the PQC
+        n_layers = 15  # Number of layers in the PQC
         qubits = cirq.GridQubit.rect(1, n_qubits)
         ops = [cirq.Z(q) for q in qubits]
         observables = [ops[0], ops[1], ops[2]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
         model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False)
         model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True)
+        batch_size = 16
+        steps_per_update = 10  # Train the model every x steps
+        steps_per_target_update = 30  # Update the target model every x steps
+
     else:
         layers = [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
         model = generate_model(layers, n_state, n_actions)
         model_target = generate_model(layers, n_state, n_actions)
+        batch_size = 32
+        steps_per_update = 25  # Train the model every x steps
+        steps_per_target_update = 75  # Update the target model every x steps
 
     model_target.set_weights(model.get_weights())
     print(model_target.summary())
@@ -369,9 +401,7 @@ def main():
     epsilon = 1.0  # Epsilon greedy parameter
     epsilon_min = 0.01  # Minimum epsilon greedy parameter
     decay_epsilon = 0.95  # Decay rate of epsilon greedy parameter
-    batch_size = 32
-    steps_per_update = 25  # Train the model every x steps
-    steps_per_target_update = 75  # Update the target model every x steps
+
     test_steps_target_per_episode = 1000
     test_repetitions = 100
     grad_log_steps = 100
@@ -441,7 +471,7 @@ def main():
     if Quantum:
         optimizer_in = tf.keras.optimizers.Adam(learning_rate=0.001, amsgrad=True)
         optimizer_var = tf.keras.optimizers.Adam(learning_rate=0.001, amsgrad=True)
-        optimizer_out = tf.keras.optimizers.Adam(learning_rate=0.1, amsgrad=True)
+        optimizer_out = tf.keras.optimizers.Adam()#learning_rate=0.01, amsgrad=True)
         # Assign the model parameters to each optimizer
         w_in, w_var, w_out = 1, 0, 2
     else:
@@ -487,11 +517,11 @@ def main():
                 training_batch = np.random.choice(replay_memory, size=batch_size)
                 if Quantum:
                     grads = Q_learning_update_quantum(np.asarray([x['state'] for x in training_batch]),
-                                  np.asarray([x['action'] for x in training_batch]),
-                                  np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
-                                  np.asarray([x['next_state'] for x in training_batch]),
-                                  np.asarray([x['done'] for x in training_batch], dtype=np.float32),
-                                  model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
+                                                      np.asarray([x['action'] for x in training_batch]),
+                                                      np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
+                                                      np.asarray([x['next_state'] for x in training_batch]),
+                                                      np.asarray([x['done'] for x in training_batch], dtype=np.float32),
+                                                      model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
 
                 else:
                     grads = Q_learning_update_classic(np.asarray([x['state'] for x in training_batch]),
