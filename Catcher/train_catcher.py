@@ -3,6 +3,8 @@ import os
 import sys
 from collections import deque
 from datetime import timedelta
+from random import randint
+from time import sleep
 
 import cirq
 import sympy
@@ -333,6 +335,7 @@ def get_parsed():
 
 
 def main():
+    sleep(randint(0,5))
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -381,6 +384,8 @@ def main():
         batch_size = 16
         steps_per_update = 10  # Train the model every x steps
         steps_per_target_update = 30  # Update the target model every x steps
+        n_episodes = 1000
+
 
     else:
         layers = [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
@@ -389,11 +394,11 @@ def main():
         batch_size = 32
         steps_per_update = 25  # Train the model every x steps
         steps_per_target_update = 75  # Update the target model every x steps
+        n_episodes = 10000  # 30000
 
     model_target.set_weights(model.get_weights())
     print(model_target.summary())
     gamma = 0.99
-    n_episodes = 5000 #30000
     steps_target_per_episode = 250
     # Define replay memory
     max_memory_length = 10000  # Maximum replay length
@@ -426,6 +431,7 @@ def main():
             "test_repetitions": test_repetitions,
             "grad_log_steps": grad_log_steps,
             "type": type,
+            "run":arguments['run']
         }
     else:
         arguments = {
@@ -444,6 +450,8 @@ def main():
             "test_repetitions": test_repetitions,
             "grad_log_steps": grad_log_steps,
             "type": type,
+            "run": arguments['run']
+
         }
 
     run = wandb.init(project=project,
@@ -461,7 +469,7 @@ def main():
     # run inference on every image, assuming my_model returns the
     # predicted label, and the ground truth labels are available
 
-    wandb.alert(title="Experiment Started", text=f"Experiment {message_name} Started", wait_duration=timedelta(seconds=1))
+    wandb.alert(title="Experiment Started", text=f"Experiment {message_name} Started", wait_duration=timedelta(seconds=0))
 
     wandb.define_metric("training_update/step")
     grad_names = [f"training_update/{n.name}" for n in model.trainable_variables] + ["training_update/step", "training_update/episode"]
@@ -580,18 +588,24 @@ def main():
     wandb.run.summary["Final_total_interaction_steps"] = step_count
     wandb.run.summary["Final_train_updates"] = train_updates
 
-    show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode, save_dir, test_table, True, True)
+    # For visualisation reset episode
+    final_comp_table = wandb.Table(columns=columns)
+    episode = 1
+
+    show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode, save_dir, final_comp_table, True, True)
 
     model_target.load_weights(save_dir + "/saved_weights/target_weights")
 
-    show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode + 1, save_dir, test_table, True, True)
-    show_epopch(env, model_target, epsilon, n_actions, test_steps_target_per_episode, episode + 2, save_dir, test_table, True, True)
+    show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode + 1, save_dir, final_comp_table, True, True)
+    show_epopch(env, model_target, epsilon, n_actions, test_steps_target_per_episode, episode + 2, save_dir, final_comp_table, True, True)
 
-    wandb.log({"video_table": test_table})
-
+    wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
     test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions)
-    wandb.save(f"/home/lh/Documents/Q-RL_tests/Catcher/Saves/logs_to_move/run-{arguments['run']}.log")
-    wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=1))
+
+
+    wandb.save(f"Saves/logs_to_move/run-{arguments['run']}.log")
+
+    wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=0))
 
     run.finish()
 
