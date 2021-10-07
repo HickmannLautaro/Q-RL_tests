@@ -225,11 +225,21 @@ class Catcher(base.PyGameWrapper):
 
         """
 
+        player_x = self.player.rect.center[0] + self.player.width//2
+        if player_x == 256:
+            player_x = 255
+        fruit_x = self.fruit.rect.center[0] + self.fruit.size//2
+
+        fruit_y = np.maximum(1,self.fruit.rect.center[1])
+        # Filtering
+        player_x = np.clip(player_x -255, -1, 1)
+        fruit_x = np.clip(fruit_x - 255 , -1, 1)
+        fruit_y = (481 - fruit_y)/481
 
         state = {
-            "player_x": self.player.rect.center[0] + self.player.width//2,
-            "fruit_x": self.fruit.rect.center[0] + self.fruit.size//2,
-            "fruit_y": np.maximum(0,self.fruit.rect.center[1])
+            "player_x": player_x,
+            "fruit_x": fruit_x,
+            "fruit_y": fruit_y
         }
 
         return state

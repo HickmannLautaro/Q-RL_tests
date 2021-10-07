@@ -214,7 +214,7 @@ def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target):
     """Generates a Keras model for a data re-uploading PQC Q-function approximator."""
 
     input_tensor = tf.keras.Input(shape=(len(qubits),), dtype=tf.dtypes.float32, name='input')
-    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='linear')([input_tensor])
+    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='tanh')([input_tensor])
     process = tf.keras.Sequential([Rescaling(len(observables))], name=target * "Target" + "Q-values")
     Q_values = process(re_uploading_pqc)
     model = tf.keras.Model(inputs=[input_tensor], outputs=Q_values)
@@ -307,7 +307,8 @@ def show_epopch(env, model, epsilon, n_actions, steps_target_per_episode, episod
         action_names = ["left", "stay", "right"]
         reward = env.act(actions[action])
 
-        print(f"player x position {state_array[0]:3d},   fruits x position {state_array[1]:3d},   fruits y position {state_array[2]:3d}, action {action_names[action]}, reward {reward}, score {env.score()} ")
+        # print(f"player x position {state_array[0]:3d},   fruits x position {state_array[1]:3d},   fruits y position {state_array[2]:3d}, action {action_names[action]}, reward {reward}, score {env.score()} ")
+        print(f"player x position {int(state_array[0])},   fruits x position {int(state_array[1])},   fruits y position {state_array[2]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()} ")
 
         if env.game_over():
             break
@@ -341,12 +342,12 @@ def main():
     name = f"Run-{arguments['run']}"
     project = "Catcher-Simplified"
     if Quantum:
-        arg_mod = "Quantum_v7"
+        arg_mod = "Quantum_v8"
         type = "quantum"
         global tfq
         tfq = __import__('tensorflow_quantum', globals(), locals())
     else:
-        arg_mod = "Classic_v1"
+        arg_mod = "Classic_v2"
         type = "classic"
 
     message_name = f"{project}/{arg_mod}/{name}"
@@ -392,7 +393,7 @@ def main():
     model_target.set_weights(model.get_weights())
     print(model_target.summary())
     gamma = 0.99
-    n_episodes = 30000
+    n_episodes = 5000 #30000
     steps_target_per_episode = 250
     # Define replay memory
     max_memory_length = 10000  # Maximum replay length
@@ -589,7 +590,7 @@ def main():
     wandb.log({"video_table": test_table})
 
     test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions)
-
+    wandb.save(f"/home/lh/Documents/Q-RL_tests/Catcher/Saves/logs_to_move/run-{arguments['run']}.log")
     wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=1))
 
     run.finish()
