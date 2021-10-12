@@ -69,7 +69,7 @@ def Q_learning_update_classic(states, actions, rewards, next_states, done, model
     # Backpropagation
     grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    return grads
+    return grads, loss
 
 
 @tf.function
@@ -93,14 +93,14 @@ def Q_learning_update_quantum(states, actions, rewards, next_states, done, model
         q_values_masked = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
 
         loss = tf.keras.losses.Huber()(target_q_values, q_values_masked)  # Original
-        #loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)
+        # loss = tf.keras.losses.mean_squared_error(target_q_values, q_values_masked)
 
         # Backpropagation
     grads = tape.gradient(loss, model.trainable_variables)
 
     for optimizer, w in zip([optimizer_in, optimizer_var, optimizer_out], [w_in, w_var, w_out]):
         optimizer.apply_gradients([(grads[w], model.trainable_variables[w])])
-    return grads
+    return grads, loss
 
 
 def generate_circuit(qubits, n_layers):
@@ -282,10 +282,7 @@ def show_epopch(env, model, epsilon, n_actions, steps_target_per_episode, episod
     env.reset_game()
     print("\n")
     img = Image.new("RGB", (512, 512), (120, 120, 120))
-    frames = []
-    frames.append(img)
-    frames.append(img)
-    frames.append(img)
+    frames = [img, img, img]
 
     for step in range(steps_target_per_episode + 1):
 
@@ -335,7 +332,7 @@ def get_parsed():
 
 
 def main():
-    sleep(randint(0,5))
+    sleep(randint(0, 5))
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -345,12 +342,12 @@ def main():
     name = f"Run-{arguments['run']}"
     project = "Catcher-Simplified"
     if Quantum:
-        arg_mod = "Quantum_v8"
+        arg_mod = "Quantum_v9"
         type = "quantum"
         global tfq
         tfq = __import__('tensorflow_quantum', globals(), locals())
     else:
-        arg_mod = "Classic_v2"
+        arg_mod = "Classic_v3"
         type = "classic"
 
     message_name = f"{project}/{arg_mod}/{name}"
@@ -384,8 +381,6 @@ def main():
         batch_size = 16
         steps_per_update = 10  # Train the model every x steps
         steps_per_target_update = 30  # Update the target model every x steps
-        n_episodes = 1000
-
 
     else:
         layers = [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
@@ -394,7 +389,8 @@ def main():
         batch_size = 32
         steps_per_update = 25  # Train the model every x steps
         steps_per_target_update = 75  # Update the target model every x steps
-        n_episodes = 10000  # 30000
+
+    n_episodes = 10000  # 30000
 
     model_target.set_weights(model.get_weights())
     print(model_target.summary())
@@ -411,6 +407,8 @@ def main():
     test_steps_target_per_episode = 1000
     test_repetitions = 100
     grad_log_steps = 100
+    training_stop_episodes = 100
+    training_stop_percent = 0.98
 
     if Quantum:
         arguments = {
@@ -431,8 +429,11 @@ def main():
             "test_repetitions": test_repetitions,
             "grad_log_steps": grad_log_steps,
             "type": type,
-            "run":arguments['run']
+            "training_stop_episodes": training_stop_episodes,
+            "training_stop_percent": training_stop_percent,
+            "run": arguments['run']
         }
+
     else:
         arguments = {
             "layers": layers,
@@ -450,6 +451,8 @@ def main():
             "test_repetitions": test_repetitions,
             "grad_log_steps": grad_log_steps,
             "type": type,
+            "training_stop_episodes": training_stop_episodes,
+            "training_stop_percent": training_stop_percent,
             "run": arguments['run']
 
         }
@@ -458,40 +461,53 @@ def main():
                      group=arg_mod,
                      name=arg_mod + "_" + name,
                      config=arguments,
-                     dir=save_dir)
+                     dir="Saves")
 
     # create a Table with the same columns as above,
     # plus confidence scores for all labels
     columns = ["Episode", "Video", "steps", "score"]
 
-    test_table = wandb.Table(columns=columns)
+    #test_table = wandb.Table(columns=columns)
 
     # run inference on every image, assuming my_model returns the
     # predicted label, and the ground truth labels are available
 
     wandb.alert(title="Experiment Started", text=f"Experiment {message_name} Started", wait_duration=timedelta(seconds=0))
 
-    wandb.define_metric("training_update/step")
-    grad_names = [f"training_update/{n.name}" for n in model.trainable_variables] + ["training_update/step", "training_update/episode"]
-    wandb.define_metric("training_update/*", step_metric="repetition")
+ 
 
-    wandb.define_metric("episode")
-    wandb.define_metric("episode_reward", step_metric="episode")
+    wandb.define_metric("training_metrics/episode")
+    wandb.define_metric("training_metrics/*", step_metric="training_metrics/episode")
+
     if Quantum:
         optimizer_in = tf.keras.optimizers.Adam(learning_rate=0.001, amsgrad=True)
         optimizer_var = tf.keras.optimizers.Adam(learning_rate=0.001, amsgrad=True)
-        optimizer_out = tf.keras.optimizers.Adam()#learning_rate=0.01, amsgrad=True)
+        optimizer_out = tf.keras.optimizers.Adam()  # learning_rate=0.01, amsgrad=True)
         # Assign the model parameters to each optimizer
         w_in, w_var, w_out = 1, 0, 2
+
+        wandb.define_metric("training_update_quantum/step")
+        wandb.define_metric("training_update_quantum/*", step_metric="training_update_quantum/step")
+        grad_names = [f"training_update_quantum/{n.name}_grads" for n in model.trainable_variables] + ["training_update_quantum/step", "training_update_quantum/episode", "training_update_quantum/loss"]
+        
+        wandb.define_metric("parameters/*", step_metric="training_update_quantum/step")
+        # param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])]  + ["parameters/step" , "parameters/episode]
+        #param_names = [f"parameters/unfiltered/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + [f"parameters/filtered/{model_target.trainable_variables[0].name}/{model_target.trainable_variables[0].name}_{i}" for i in range(model_target.trainable_variables[0].shape[-1])] + ["parameters/step","parameters/episode"]
+        param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + ["training_update_quantum/step","training_update_quantum/episode"]
+
+        [print(f"{n.name[:-2]} shape = {n.shape}") for n in model_target.trainable_variables]
     else:
         optimizer = tf.keras.optimizers.Adam()  # learning_rate=1e-2)
+
+        wandb.define_metric("training_update_classic/step")
+        wandb.define_metric("training_update_classic/*", step_metric="training_update_classic/step")
+        grad_names = [f"training_update_classic/{n.name}_grads" for n in model.trainable_variables] + ["training_update_classic/step", "training_update_classic/episode", "training_update_classic/loss"]
 
     game = Catcher(width=512, height=512, init_lives=3)
     p = PLE(game, display_screen=False, state_preprocessor=process_state)  # ,  force_fps=False, fps=240)
     env = PLE(game, display_screen=True, state_preprocessor=process_state)  # , force_fps=False, fps=2)
 
     episode_reward_history = []
-    episode_score_history = []
 
     steps_per_ep_history = []
 
@@ -499,78 +515,121 @@ def main():
     t = trange(n_episodes, desc='Training', leave=True)
     train_updates = 0
     best_avg_100_score = 0
+    training_stop_counter = 0
 
     for episode in t:
-        episode_reward = 0
-        p.reset_game()
-        state = np.array(list(p.getGameState()[0]))
-        steps_in_episode = 0
+        if training_stop_counter < training_stop_episodes:
+            episode_reward = 0
+            p.reset_game()
+            state = np.array(list(p.getGameState()[0]))
+            steps_in_episode = 0
 
-        for step in range(steps_target_per_episode + 1):
-            # Interact with env
-            interaction = interact_env(state, model, epsilon, n_actions, p)
+            for step in range(steps_target_per_episode + 1):
+                # Interact with env
+                interaction = interact_env(state, model, epsilon, n_actions, p)
 
-            # Store interaction in the replay memory
-            replay_memory.append(interaction)
+                # Store interaction in the replay memory
+                replay_memory.append(interaction)
 
-            state = interaction['next_state']
-            episode_reward += interaction['reward']
-            step_count += 1
-            steps_in_episode += 1
+                state = interaction['next_state']
+                episode_reward += interaction['reward']
+                step_count += 1
+                steps_in_episode += 1
 
-            # Update model
+                # Update model
 
-            if step_count % steps_per_update == 0:
-                train_updates += 1
-                # Sample a batch of interactions and update Q_function
-                training_batch = np.random.choice(replay_memory, size=batch_size)
-                if Quantum:
-                    grads = Q_learning_update_quantum(np.asarray([x['state'] for x in training_batch]),
-                                                      np.asarray([x['action'] for x in training_batch]),
-                                                      np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
-                                                      np.asarray([x['next_state'] for x in training_batch]),
-                                                      np.asarray([x['done'] for x in training_batch], dtype=np.float32),
-                                                      model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
+                if step_count % steps_per_update == 0:
+                    train_updates += 1
+                    # Sample a batch of interactions and update Q_function
+                    training_batch = np.random.choice(replay_memory, size=batch_size)
+                    if Quantum:
 
-                else:
-                    grads = Q_learning_update_classic(np.asarray([x['state'] for x in training_batch]),
-                                                      np.asarray([x['action'] for x in training_batch]),
-                                                      np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
-                                                      np.asarray([x['next_state'] for x in training_batch]),
-                                                      np.asarray([x['done'] for x in training_batch], dtype=np.float32),
-                                                      model, model_target, gamma, optimizer, n_actions)
+                        grads, loss = Q_learning_update_quantum(np.asarray([x['state'] for x in training_batch]),
+                                                                np.asarray([x['action'] for x in training_batch]),
+                                                                np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
+                                                                np.asarray([x['next_state'] for x in training_batch]),
+                                                                np.asarray([x['done'] for x in training_batch], dtype=np.float32),
+                                                                model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
 
-                grad_list = [wandb.Histogram(g) for g in grads] + [train_updates, episode]
-                if train_updates % 100 == 0:
-                    wandb.log(dict(zip(grad_names, grad_list)))
+                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss] #mean or sum
+                        if len(episode_reward_history) > 0:
+                            grad_names += ["training_update_quantum/last_ep_reward"]
+                            grad_list = grad_list + [episode_reward_history[-1]]
+                        wandb.log(dict(zip(grad_names, grad_list)))
 
-            # Update target model
-            if step_count % steps_per_target_update == 0:
-                model_target.set_weights(model.get_weights())
+                        if step_count % (steps_per_target_update * 10) == 0:
+                            # params_target_unf = model_target.trainable_variables[0][0].numpy().tolist() + model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist()  # thetas, lambdas, obs-weights
+                            # params_target_f = np.mod(model_target.trainable_variables[0][0].numpy()+0.0000001, 2 * np.pi).tolist()
+                            # params = params_target_unf + params_target_f + [train_updates, episode]
+                            params =  model_target.trainable_variables[0][0].numpy().tolist() + model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist() + [train_updates, episode]
+                            if len(episode_reward_history) > 0:
+                                param_names += ["parameters/last_ep_reward"]
+                                params = params + [episode_reward_history[-1]]
+                            wandb.log(dict(zip(param_names, params)))
 
-            # Check if the episode is finished
-            if interaction['done']:
-                break
+                    else:
+                        grads, loss = Q_learning_update_classic(np.asarray([x['state'] for x in training_batch]),
+                                                                np.asarray([x['action'] for x in training_batch]),
+                                                                np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
+                                                                np.asarray([x['next_state'] for x in training_batch]),
+                                                                np.asarray([x['done'] for x in training_batch], dtype=np.float32),
+                                                                model, model_target, gamma, optimizer, n_actions)
+                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss] #mean or sum
+                        if len(episode_reward_history) > 0:
+                            grad_names += ["training_update_classic/last_ep_reward"]
+                            grad_list = grad_list + [episode_reward_history[-1]]
+                        wandb.log(dict(zip(grad_names, grad_list)))
 
-        if episode % (n_episodes // 10) == 0:
-            show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode, save_dir, test_table, True, True)
+                # Update target model
+                if step_count % steps_per_target_update == 0:
+                    model_target.set_weights(model.get_weights())
 
-        # Decay epsilon
-        epsilon = max(epsilon * decay_epsilon, epsilon_min)
-        episode_reward_history.append(episode_reward)
-        wandb.log({'episode_reward': episode_reward, "steps_in_episode": steps_in_episode, "episode": episode})
+                # Check if the episode is finished
+                if interaction['done']:
+                    break
+
+            if episode % (n_episodes // 10) == 0:
+                show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode, save_dir, None, True, False)
+
+            # Decay epsilon
+            epsilon = max(epsilon * decay_epsilon, epsilon_min)
+            episode_reward_history.append(episode_reward)
+            avg_rewards_100 = np.mean(episode_reward_history[-100:])
+            # Save model if avg score of las 100 is the best
+            if avg_rewards_100 >= best_avg_100_score:
+                wandb.run.summary["Saved_at_episode"] = episode
+                wandb.run.summary["Saved_avg_score"] = avg_rewards_100
+                wandb.run.summary["Saved_avg"] = p.score()
+                model_target.save_weights(save_dir + "/saved_weights/target_weights")
+                best_avg_100_score = avg_rewards_100
+            if avg_rewards_100 >= (steps_target_per_episode // 5) * training_stop_percent:
+                training_stop_counter += 1
+            else:
+                training_stop_counter = 0
+
+            stopped_at = episode
+
+        else:
+            episode_reward = avg_rewards_100
+
+            episode_reward_history.append(episode_reward)
+
         avg_rewards = np.mean(episode_reward_history[-10:])
 
         avg_rewards_100 = np.mean(episode_reward_history[-100:])
-        # Save model if avg score of las 100 is the best
-        if avg_rewards_100 >= best_avg_100_score:
-            wandb.run.summary["Saved_at_episode"] = episode
-            wandb.run.summary["Saved_avg_score"] = avg_rewards_100
-            wandb.run.summary["Saved_avg"] = p.score()
-            model_target.save_weights(save_dir + "/saved_weights/target_weights")
-            best_avg_100_score = avg_rewards_100
 
-        t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 10 rew {:04.2f}, avg 100 rew {:04.2f}".format(episode + 1, n_episodes, steps_in_episode, p.score(), avg_rewards, avg_rewards_100))
+        wandb.log({'training_metrics/episode_reward': episode_reward,
+                   'training_metrics/episode_reward_avg_10': avg_rewards,
+                   'training_metrics/episode_reward_avg_100': avg_rewards_100,
+                   "training_metrics/steps_in_episode": steps_in_episode,
+                   "training_metrics/training_stop_counter": training_stop_counter,
+                   "training_metrics/epsilon": epsilon,
+                   "training_metrics/episode": episode})
+        if training_stop_counter < training_stop_episodes:
+            t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 10 rew {:04.2f}, avg 100 rew {:04.2f}, training_stop_counter {:3d}".format(episode + 1, n_episodes, steps_in_episode, episode_reward, avg_rewards, avg_rewards_100, training_stop_counter))
+        else:
+            t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 10 rew {:04.2f}, avg 100 rew {:04.2f}, stopped at {:3d}".format(episode + 1, n_episodes, steps_in_episode, episode_reward, avg_rewards, avg_rewards_100, stopped_at))
+
         t.refresh()  # to show immediately the update
         # if avg_rewards_200 > (steps_target_per_episode//5 )*.95:
         #     break
@@ -587,6 +646,7 @@ def main():
     # Testing
     wandb.run.summary["Final_total_interaction_steps"] = step_count
     wandb.run.summary["Final_train_updates"] = train_updates
+    wandb.run.summary["stopped_at"] = stopped_at
 
     # For visualisation reset episode
     final_comp_table = wandb.Table(columns=columns)
@@ -599,11 +659,14 @@ def main():
     show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode + 1, save_dir, final_comp_table, True, True)
     show_epopch(env, model_target, epsilon, n_actions, test_steps_target_per_episode, episode + 2, save_dir, final_comp_table, True, True)
 
-    wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
+    #wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
+    wandb.log({"final_video_table": final_comp_table})
+
     test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions)
-
-
-    wandb.save(f"Saves/logs_to_move/run-{arguments['run']}.log")
+    if Quantum:
+        wandb.save(f"Saves/logs_to_move/run-{arguments['run']}.log")
+    else:
+        wandb.save(f"Saves/logs_to_move/classic/run-{arguments['run']}.log")
 
     wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=0))
 
