@@ -5,6 +5,7 @@ from collections import deque
 from datetime import timedelta
 from random import randint
 from time import sleep
+import time
 
 import cirq
 import sympy
@@ -243,12 +244,14 @@ def process_state(state):
     return np.array([state.values()])
 
 
-def test_phase(env, model, epsilon, n_actions, steps_target_per_episode, repetitions):
+def test_phase(env, model, epsilon, n_actions, steps_target_per_episode, repetitions, arguments):
     actions = [97, None, 100]
+
     wandb.define_metric("repetition")
     wandb.define_metric("test/*", step_metric="repetition")
+    my_table = wandb.Table(columns=["repetition", "reward", "name", "group"])
 
-    for r in range(repetitions):
+    for r in trange(repetitions, desc='Test phase'):
         env.reset_game()
 
         for step in range(steps_target_per_episode + 1):
@@ -273,7 +276,9 @@ def test_phase(env, model, epsilon, n_actions, steps_target_per_episode, repetit
             if env.game_over():
                 break
         wandb.log({'test/episode_reward': env.score(), "repetition": r})
-        print(env.score())
+        my_table.add_data(r, env.score(), arguments["name"], arguments["group"])
+
+    wandb.log({"Test predictions": my_table})
 
 
 def show_epopch(env, model, epsilon, n_actions, steps_target_per_episode, episode, save_dir, test_table, save=False, upload=False):
@@ -332,23 +337,23 @@ def get_parsed():
 
 
 def main():
-    sleep(randint(0, 5))
-    physical_devices = tf.config.list_physical_devices('GPU')
-    if len(physical_devices) > 0:
-        tf.config.experimental.set_memory_growth(physical_devices[0], True)
     arguments = get_parsed()
     Quantum = arguments["Quantum"]
 
     name = f"Run-{arguments['run']}"
     project = "Catcher-Simplified"
     if Quantum:
-        arg_mod = "Quantum_v9"
+        tf.config.set_visible_devices([], 'GPU')
+        arg_mod = "Quantum_v10_cpu" #"Quantum_v9_cpu"
         type = "quantum"
         global tfq
         tfq = __import__('tensorflow_quantum', globals(), locals())
     else:
         arg_mod = "Classic_v3"
         type = "classic"
+        physical_devices = tf.config.list_physical_devices('GPU')
+        if len(physical_devices) > 0:
+            tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
     message_name = f"{project}/{arg_mod}/{name}"
     save_dir = os.path.join("Saves", message_name)
@@ -372,7 +377,7 @@ def main():
 
     if Quantum:
         n_qubits = 3  # Dimension of the state vectors in CartPole     [player x position,   fruits x position,   fruits y position]
-        n_layers = 15  # Number of layers in the PQC
+        n_layers = 10 #15 # Number of layers in the PQC
         qubits = cirq.GridQubit.rect(1, n_qubits)
         ops = [cirq.Z(q) for q in qubits]
         observables = [ops[0], ops[1], ops[2]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
@@ -431,7 +436,9 @@ def main():
             "type": type,
             "training_stop_episodes": training_stop_episodes,
             "training_stop_percent": training_stop_percent,
-            "run": arguments['run']
+            "run": arguments['run'],
+            "name": arg_mod + "_" + name,
+            "group" :arg_mod
         }
 
     else:
@@ -453,8 +460,9 @@ def main():
             "type": type,
             "training_stop_episodes": training_stop_episodes,
             "training_stop_percent": training_stop_percent,
-            "run": arguments['run']
-
+            "run": arguments['run'],
+            "name": arg_mod + "_" + name,
+            "group": arg_mod
         }
 
     run = wandb.init(project=project,
@@ -467,14 +475,12 @@ def main():
     # plus confidence scores for all labels
     columns = ["Episode", "Video", "steps", "score"]
 
-    #test_table = wandb.Table(columns=columns)
+    # test_table = wandb.Table(columns=columns)
 
     # run inference on every image, assuming my_model returns the
     # predicted label, and the ground truth labels are available
 
-    wandb.alert(title="Experiment Started", text=f"Experiment {message_name} Started", wait_duration=timedelta(seconds=0))
-
- 
+    # wandb.alert(title="Experiment Started", text=f"Experiment {message_name} Started", wait_duration=timedelta(seconds=0))
 
     wandb.define_metric("training_metrics/episode")
     wandb.define_metric("training_metrics/*", step_metric="training_metrics/episode")
@@ -489,11 +495,12 @@ def main():
         wandb.define_metric("training_update_quantum/step")
         wandb.define_metric("training_update_quantum/*", step_metric="training_update_quantum/step")
         grad_names = [f"training_update_quantum/{n.name}_grads" for n in model.trainable_variables] + ["training_update_quantum/step", "training_update_quantum/episode", "training_update_quantum/loss"]
-        
+
         wandb.define_metric("parameters/*", step_metric="training_update_quantum/step")
         # param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])]  + ["parameters/step" , "parameters/episode]
-        #param_names = [f"parameters/unfiltered/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + [f"parameters/filtered/{model_target.trainable_variables[0].name}/{model_target.trainable_variables[0].name}_{i}" for i in range(model_target.trainable_variables[0].shape[-1])] + ["parameters/step","parameters/episode"]
-        param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + ["training_update_quantum/step","training_update_quantum/episode"]
+        # param_names = [f"parameters/unfiltered/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + [f"parameters/filtered/{model_target.trainable_variables[0].name}/{model_target.trainable_variables[0].name}_{i}" for i in range(model_target.trainable_variables[0].shape[-1])] + ["parameters/step","parameters/episode"]
+        # param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables for i in range(n.shape[-1])] + ["training_update_quantum/step", "training_update_quantum/episode"]
+        param_names = [f"parameters/{n.name}/{n.name}_{i}" for n in model_target.trainable_variables[1:] for i in range(n.shape[-1])] + ["training_update_quantum/step", "training_update_quantum/episode"]
 
         [print(f"{n.name[:-2]} shape = {n.shape}") for n in model_target.trainable_variables]
     else:
@@ -516,8 +523,10 @@ def main():
     train_updates = 0
     best_avg_100_score = 0
     training_stop_counter = 0
+    plot_vals_x = []
 
     for episode in t:
+        start_ep_time = time.time()
         if training_stop_counter < training_stop_episodes:
             episode_reward = 0
             p.reset_game()
@@ -525,6 +534,7 @@ def main():
             steps_in_episode = 0
 
             for step in range(steps_target_per_episode + 1):
+                start = time.time()
                 # Interact with env
                 interaction = interact_env(state, model, epsilon, n_actions, p)
 
@@ -535,10 +545,11 @@ def main():
                 episode_reward += interaction['reward']
                 step_count += 1
                 steps_in_episode += 1
-
+                interaction_time = (time.time() - start)
                 # Update model
 
                 if step_count % steps_per_update == 0:
+                    update_start = time.time()
                     train_updates += 1
                     # Sample a batch of interactions and update Q_function
                     training_batch = np.random.choice(replay_memory, size=batch_size)
@@ -550,8 +561,9 @@ def main():
                                                                 np.asarray([x['next_state'] for x in training_batch]),
                                                                 np.asarray([x['done'] for x in training_batch], dtype=np.float32),
                                                                 model, model_target, gamma, n_actions, optimizer_in, optimizer_var, optimizer_out, w_in, w_var, w_out)
-
-                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss] #mean or sum
+                        update_time = (time.time() - update_start)
+                        start_log_time = time.time()
+                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss]  # mean or sum
                         if len(episode_reward_history) > 0:
                             grad_names += ["training_update_quantum/last_ep_reward"]
                             grad_list = grad_list + [episode_reward_history[-1]]
@@ -561,11 +573,19 @@ def main():
                             # params_target_unf = model_target.trainable_variables[0][0].numpy().tolist() + model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist()  # thetas, lambdas, obs-weights
                             # params_target_f = np.mod(model_target.trainable_variables[0][0].numpy()+0.0000001, 2 * np.pi).tolist()
                             # params = params_target_unf + params_target_f + [train_updates, episode]
-                            params =  model_target.trainable_variables[0][0].numpy().tolist() + model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist() + [train_updates, episode]
+                            # params = np.mod(np.rad2deg(model_target.trainable_variables[0][0].numpy()), 360).tolist() + model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist() + [train_updates, episode]  # thetas, lambdas, obs-weights
+                            params = model_target.trainable_variables[1].numpy().tolist() + model_target.trainable_variables[2][0].numpy().tolist() + [train_updates, episode]  # thetas, lambdas, obs-weights
+
                             if len(episode_reward_history) > 0:
                                 param_names += ["parameters/last_ep_reward"]
                                 params = params + [episode_reward_history[-1]]
                             wandb.log(dict(zip(param_names, params)))
+                            plot_vals_x.append(train_updates)
+                            if len(plot_vals_x) == 1:
+                                plot_vals_y = np.mod(np.rad2deg(model_target.trainable_variables[0][0].numpy()), 360)
+                            else:
+                                plot_vals_y = np.vstack((plot_vals_y, np.mod(np.rad2deg(model_target.trainable_variables[0][0].numpy()), 360)))
+
 
                     else:
                         grads, loss = Q_learning_update_classic(np.asarray([x['state'] for x in training_batch]),
@@ -574,11 +594,20 @@ def main():
                                                                 np.asarray([x['next_state'] for x in training_batch]),
                                                                 np.asarray([x['done'] for x in training_batch], dtype=np.float32),
                                                                 model, model_target, gamma, optimizer, n_actions)
-                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss] #mean or sum
+                        update_time = (time.time() - update_start)
+                        start_log_time = time.time()
+                        grad_list = [np.sum(np.abs(g)) for g in grads] + [train_updates, episode, loss]  # mean or sum
                         if len(episode_reward_history) > 0:
                             grad_names += ["training_update_classic/last_ep_reward"]
                             grad_list = grad_list + [episode_reward_history[-1]]
                         wandb.log(dict(zip(grad_names, grad_list)))
+
+                    wandb.log({  # only logged for training updates otherwise logging breaks. To much data.
+                        "time/step": step_count,
+                        "time/update_time": update_time,
+                        "time/logging_time": time.time() - start_log_time,
+                        "time/interaction_time": interaction_time
+                    })
 
                 # Update target model
                 if step_count % steps_per_target_update == 0:
@@ -591,6 +620,7 @@ def main():
             if episode % (n_episodes // 10) == 0:
                 show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode, save_dir, None, True, False)
 
+            start_ep_log_time = time.time()
             # Decay epsilon
             epsilon = max(epsilon * decay_epsilon, epsilon_min)
             episode_reward_history.append(episode_reward)
@@ -610,6 +640,8 @@ def main():
             stopped_at = episode
 
         else:
+            start_ep_log_time = time.time()
+
             episode_reward = avg_rewards_100
 
             episode_reward_history.append(episode_reward)
@@ -624,7 +656,11 @@ def main():
                    "training_metrics/steps_in_episode": steps_in_episode,
                    "training_metrics/training_stop_counter": training_stop_counter,
                    "training_metrics/epsilon": epsilon,
-                   "training_metrics/episode": episode})
+                   "training_metrics/episode": episode,
+                   "time/episode_time": time.time() - start_ep_time,
+                   "time/ep_log_time": time.time() - start_ep_log_time,
+                   })
+
         if training_stop_counter < training_stop_episodes:
             t.set_description("Episode {:5d}/{:5d}, steps in ep {:4d}, score {:04.2f}, avg 10 rew {:04.2f}, avg 100 rew {:04.2f}, training_stop_counter {:3d}".format(episode + 1, n_episodes, steps_in_episode, episode_reward, avg_rewards, avg_rewards_100, training_stop_counter))
         else:
@@ -656,19 +692,39 @@ def main():
 
     model_target.load_weights(save_dir + "/saved_weights/target_weights")
 
+    if Quantum:
+        theta_names = [f"{model_target.trainable_variables[0].name}_{i}" for i in range(model_target.trainable_variables[0].shape[-1])]
+        thetas_table = wandb.Table(columns=["theta_val", "theta_name", "name"])
+        for t, n in zip(np.mod(np.rad2deg(model_target.trainable_variables[0][0].numpy()), 360), theta_names):
+            thetas_table.add_data(t, n, arguments["name"])
+
+        lambdas_table = wandb.Table(columns=["lambda_val", "lambda_name", "name"])
+        for t, n in zip(np.mod(np.rad2deg(model_target.trainable_variables[1].numpy()), 360), [f"{model_target.trainable_variables[1].name}_{i}" for i in range(model_target.trainable_variables[1].shape[-1])]):
+            lambdas_table.add_data(t, n, arguments["name"])
+
+        obs_weights_table = wandb.Table(columns=["obs_weights_val", "obs_weights_name", "name"])
+        for t, n in zip(np.mod(np.rad2deg(model_target.trainable_variables[2][0].numpy()), 360), [f"{model_target.trainable_variables[2].name}_{i}" for i in range(model_target.trainable_variables[2].shape[-1])]):
+            obs_weights_table.add_data(t, n, arguments["name"])
+
+        wandb.log({"thetas_final": thetas_table,
+                   "lambdas_final": lambdas_table,
+                   "obs_weights_table":obs_weights_table,
+                   "thetas_table": wandb.plot.line_series(xs=plot_vals_x, ys=[plot_vals_y[:, i].tolist() for i in range(plot_vals_y.shape[1])], keys=theta_names, title="Thetas values over time", xname="Training updates")
+                   })
+
     show_epopch(env, model_target, epsilon, n_actions, steps_target_per_episode, episode + 1, save_dir, final_comp_table, True, True)
     show_epopch(env, model_target, epsilon, n_actions, test_steps_target_per_episode, episode + 2, save_dir, final_comp_table, True, True)
 
-    #wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
+    # wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
     wandb.log({"final_video_table": final_comp_table})
 
-    test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions)
+    test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions, arguments)
     if Quantum:
         wandb.save(f"Saves/logs_to_move/run-{arguments['run']}.log")
     else:
         wandb.save(f"Saves/logs_to_move/classic/run-{arguments['run']}.log")
 
-    wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=0))
+    # wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=0))
 
     run.finish()
 
