@@ -328,8 +328,11 @@ def show_epopch(env, model, epsilon, n_actions, steps_target_per_episode, episod
 
 def get_parsed():
     parser = argparse.ArgumentParser(description="Define and run the experiment with one config")
-    parser.add_argument('--run', type=int, help="Run iteration")
-    parser.add_argument('--Quantum', action="store_true", default=False, help="True: Quantum model, False (default) classic model")
+    parser.add_argument('--run', '-r', type=int, help="Run iteration")
+    parser.add_argument('--Quantum', '-Q', action="store_true", default=False, help="True: Quantum model, False (default) classic model")
+    parser.add_argument('--n_layers', '-Ql', type=int, help=" number of layers for the Quantum model")
+    parser.add_argument('--layers', '-l', nargs='+', type=int, help=" number of layers for the Classic model. for example 32 16 means 2 layers with first one with 32 neurons second with 16 neurons")
+    parser.add_argument('--name', '-n', type=str, help="name of the experiment")
 
     arguments = vars(parser.parse_args())
 
@@ -338,18 +341,22 @@ def get_parsed():
 
 def main():
     arguments = get_parsed()
+
     Quantum = arguments["Quantum"]
+    print(arguments)
+    if Quantum:
+        sleep(30)
 
     name = f"Run-{arguments['run']}"
     project = "Catcher-Simplified"
     if Quantum:
         tf.config.set_visible_devices([], 'GPU')
-        arg_mod = "Quantum_v10_cpu" #"Quantum_v9_cpu"
+        arg_mod = arguments["name"]  # Quantum_v10_cpu"  # "Quantum_v9_cpu"
         type = "quantum"
         global tfq
         tfq = __import__('tensorflow_quantum', globals(), locals())
     else:
-        arg_mod = "Classic_v3"
+        arg_mod = arguments["name"]  # "Classic_v3"
         type = "classic"
         physical_devices = tf.config.list_physical_devices('GPU')
         if len(physical_devices) > 0:
@@ -377,7 +384,7 @@ def main():
 
     if Quantum:
         n_qubits = 3  # Dimension of the state vectors in CartPole     [player x position,   fruits x position,   fruits y position]
-        n_layers = 10 #15 # Number of layers in the PQC
+        n_layers = arguments["n_layers"]  # 10 #15 # Number of layers in the PQC
         qubits = cirq.GridQubit.rect(1, n_qubits)
         ops = [cirq.Z(q) for q in qubits]
         observables = [ops[0], ops[1], ops[2]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
@@ -388,7 +395,7 @@ def main():
         steps_per_target_update = 30  # Update the target model every x steps
 
     else:
-        layers = [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
+        layers = arguments["layers"]  # [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
         model = generate_model(layers, n_state, n_actions)
         model_target = generate_model(layers, n_state, n_actions)
         batch_size = 32
@@ -438,7 +445,7 @@ def main():
             "training_stop_percent": training_stop_percent,
             "run": arguments['run'],
             "name": arg_mod + "_" + name,
-            "group" :arg_mod
+            "group": arg_mod
         }
 
     else:
@@ -524,6 +531,7 @@ def main():
     best_avg_100_score = 0
     training_stop_counter = 0
     plot_vals_x = []
+    stopped_at = n_episodes
 
     for episode in t:
         start_ep_time = time.time()
@@ -680,9 +688,6 @@ def main():
     # plt.plot(steps_per_ep_history)
     # plt.show()
     # Testing
-    wandb.run.summary["Final_total_interaction_steps"] = step_count
-    wandb.run.summary["Final_train_updates"] = train_updates
-    wandb.run.summary["stopped_at"] = stopped_at
 
     # For visualisation reset episode
     final_comp_table = wandb.Table(columns=columns)
@@ -708,7 +713,7 @@ def main():
 
         wandb.log({"thetas_final": thetas_table,
                    "lambdas_final": lambdas_table,
-                   "obs_weights_table":obs_weights_table,
+                   "obs_weights_table": obs_weights_table,
                    "thetas_table": wandb.plot.line_series(xs=plot_vals_x, ys=[plot_vals_y[:, i].tolist() for i in range(plot_vals_y.shape[1])], keys=theta_names, title="Thetas values over time", xname="Training updates")
                    })
 
@@ -716,13 +721,15 @@ def main():
     show_epopch(env, model_target, epsilon, n_actions, test_steps_target_per_episode, episode + 2, save_dir, final_comp_table, True, True)
 
     # wandb.log({"video_table": test_table, "final_video_table": final_comp_table})
-    wandb.log({"final_video_table": final_comp_table})
+    wandb.log({"final/video_table": final_comp_table,
+               "final/total_interaction_steps": step_count,
+               "final/train_updates": train_updates,
+               "fianl/stopped_at": stopped_at,
+               })
 
     test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions, arguments)
-    if Quantum:
-        wandb.save(f"Saves/logs_to_move/run-{arguments['run']}.log")
-    else:
-        wandb.save(f"Saves/logs_to_move/classic/run-{arguments['run']}.log")
+    wandb.save(f"{save_dir}/err.log")
+    wandb.save(f"{save_dir}/out.log")
 
     # wandb.alert(title="Experiment finished", text=f"Experiment {message_name} ended", wait_duration=timedelta(seconds=0))
 
