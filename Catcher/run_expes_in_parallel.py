@@ -91,8 +91,12 @@ def main():
         print("Starting new experiment list")
         list_of_experiments = []
 
-        for i in range(5):
-            myorder += np.arange(i, 25, 5).tolist()
+        count = 0
+        for c in configs:
+            count += c[1][1] - c[1][0]
+
+        for i,c in enumerate(configs):
+            myorder += np.arange(i, count,  c[1][1] - c[1][0]).tolist()
 
         for config in configs:
             for run in range(config[1][0], config[1][1]):
