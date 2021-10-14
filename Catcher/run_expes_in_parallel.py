@@ -125,10 +125,12 @@ def main():
     pool = multiprocessing.Pool(processes=2)
     print("-" * 100, "\nStarting experiments \n")
 
-    '''run experiments in parallel depending on Pool(processes) and when one returns remove the item from the json list.
+    '''run experiments in parallel depending on Pool(processes) and when all (n parallel processes) return removes the items from the json list.
     json file is saved and reopened so that in case the program crashes the current stat of finished experiments is automatically saved.
     If all experiments were successfully completed the list should be empty.
     '''
+
+    # TODO See how to remove element when run is finished without waiting for parallel runs to finish.
     for result in pool.imap(run_expe, list_of_experiments):
         list_of_experiments_file = open("utils/parallel_script_tmp/list_of_experiments_file.json", "r")
         list_of_experiments = json.loads(list_of_experiments_file.read())

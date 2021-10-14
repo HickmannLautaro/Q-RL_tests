@@ -724,7 +724,7 @@ def main():
     wandb.log({"final/video_table": final_comp_table,
                "final/total_interaction_steps": step_count,
                "final/train_updates": train_updates,
-               "fianl/stopped_at": stopped_at,
+               "final/stopped_at": stopped_at,
                })
 
     test_phase(p, model_target, epsilon, n_actions, test_steps_target_per_episode, test_repetitions, arguments)
