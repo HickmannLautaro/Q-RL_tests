@@ -3,7 +3,6 @@ Since metrics are loged with wandb, here the latest reports:
 
 
 ## Latest result report
-Still running
 [15/10/2021 Report](https://wandb.ai/lautaro-hickmann/Catcher-Simplified/reports/15-10-2021-Report--VmlldzoxMTE5NzI0?accessToken=5evavwkr3rd4oiud890g1efb0uodrgdc0ackklgxzms4zx4s51oncdd83s1uyrmk)
 
 
