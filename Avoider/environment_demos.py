@@ -40,7 +40,7 @@ def show_epopch(env, n_actions, steps_target_per_episode, save_dir):
         reward = env.act(actions[action])
 
         # print(f"player x position {state_array[0]:3d},   fruits x position {state_array[1]:3d},   fruits y position {state_array[2]:3d}, action {action_names[action]}, reward {reward}, score {env.score()} ")
-        print(f"player x position {int(state_array[0])},   fruits x position {int(state_array[1])},   fruits y position {state_array[2]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()} ")
+        print(f"player x position {int(state_array[0])}, line 1 y position {state_array[1]:.2f}, line 2 y position {state_array[2]:.2f}, line 3 y position {state_array[3]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()} ")
 
         if env.game_over():
             break

@@ -18,9 +18,9 @@ per step (independent of agents action) the fruit goes lower in the screen by th
 ### State space:
 s = [s_1,s_2,s_3,s_4] with:
 * s_1 ∈  [-1, 0, 1]=[Left line, middle line, right lane] players x centre position.
-* s_2 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided] obstacle in first lane y centre position
-* s_3 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided] obstacle in second lane y centre position
-* s_4 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided] obstacle in third lane y centre position
+* s_2 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in first lane y centre position
+* s_3 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in second lane y centre position
+* s_4 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in third lane y centre position
 
 ### Action space:
 action_names = [left, stay (do nothing), right] coded as [97,None, 100]  

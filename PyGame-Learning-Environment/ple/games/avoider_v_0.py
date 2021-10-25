@@ -248,14 +248,31 @@ class Avoider_v_0(base.PyGameWrapper):
         stone_2_x = np.clip(stone_2_x - 255, -1, 1)
         # stone_3_x = np.clip(stone_3_x - 255 , -1, 1)
 
+        line_1 = line_2 = line_3 = -1
+
         stone_1_y = (481 - stone_1_y) / 481
         stone_2_y = (481 - stone_2_y) / 481
-        # stone_3_y = (481 - stone_3_y) / 481
+
+
+        if stone_1_x == -1:
+            line_1 = stone_1_y
+        if stone_1_x == 0:
+            line_2 = stone_1_y
+        if stone_1_x == 1:
+            line_3 = stone_1_y
+
+        if stone_2_x == -1:
+            line_1 = stone_2_y
+        if stone_2_x == 0:
+            line_2 = stone_2_y
+        if stone_2_x == 1:
+            line_3 = stone_2_y
 
         state = {
-            "player_x": 0,  # player_x,
-            "fruit_x": 1,  # fruit_x,
-            "fruit_y": 1,  # fruit_y
+            "player_x": player_x,
+            "line_1": line_1,  # fruit_x,
+            "line_2": line_2,  # fruit_y
+            "line_3": line_3,
         }
 
         return state
@@ -271,7 +288,6 @@ class Avoider_v_0(base.PyGameWrapper):
         self._handle_player_events()
 
         self.score += self.rewards["tick"]
-
 
         if self.stone_1.rect.center[1] >= self.height:
             self.stone_1.draw_collision(self.screen)
