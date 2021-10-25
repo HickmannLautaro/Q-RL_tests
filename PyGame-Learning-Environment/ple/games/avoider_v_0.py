@@ -181,7 +181,7 @@ class Avoider_v_0(base.PyGameWrapper):
 
         self.rewards = {
             "positive": 1.0,
-            "negative": -5.0,
+            "negative": -10.0,
             "tick": 0,
             "loss": -10.0,
             "win": 5.0
@@ -310,10 +310,6 @@ class Avoider_v_0(base.PyGameWrapper):
             self.stone_2.reset()
 
         if self.stone_1.rect.center[0] - self.stone_2.rect.center[0] > 0:
-            if self.stone_2.rect.center[1] >= self.height:
-                self.stone_2.draw_collision(self.screen)
-                self.score += self.rewards["positive"]
-                self.stone_2.reset()
 
             if pygame.sprite.collide_rect(self.player, self.stone_2):
                 self.score += self.rewards["negative"]
