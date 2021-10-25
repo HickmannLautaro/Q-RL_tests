@@ -179,6 +179,14 @@ class Avoider_v_0(base.PyGameWrapper):
         self.dx = 0.0
         self.init_lives = init_lives
 
+        self.rewards = {
+            "positive": 1.0,
+            "negative": -5.0,
+            "tick": 0,
+            "loss": -10.0,
+            "win": 5.0
+        }
+
     def _handle_player_events(self):
         self.dx = 0.0
         for event in pygame.event.get():

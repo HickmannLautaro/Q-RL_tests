@@ -13,8 +13,8 @@ Made more simple and discrete.
 ![](avoider_phase_1_v_0_demo.gif)
 
 ## Specifications
-per step (independent of agents action) the fruit goes lower in the screen by the same amount (jump to next higher $y$ coordinate). There is always one fruit present (sometimes it can't be seen since it is under the screen one step.)
-
+per step (independent of agents action) the fruit goes lower in the screen by the same amount (jump to next higher y coordinate). There is always one fruit present (sometimes it can't be seen since it is under the screen one step.)
+1 live.
 ### State space:
 s = [s_1,s_2,s_3,s_4] with:
 * s_1 ∈  [-1, 0, 1]=[Left line, middle line, right lane] players x centre position.
@@ -29,7 +29,7 @@ action_names = [left, stay (do nothing), right] coded as [97,None, 100]
  * right: (if possible) jump one line to the right
 
 ### rewards
-r ∈  [1.0,0.0,-1.0,-6.0]
+r ∈  [1.0,0.0,-10.0]
 * 1 obstacle avoided (stone at same y position as agent but not same x position)
 * 0 not crashed and not avoided
 * -10 crashed into obstacle. Game Over
