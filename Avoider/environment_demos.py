@@ -2,7 +2,7 @@ import sys
 
 
 sys.path.insert(0, '../PyGame-Learning-Environment/')
-from ple.games.avoider_v_0 import Avoider_v_0
+from ple.games.avoider_v_1 import Avoider_v_1
 from ple import PLE
 import numpy as np
 
@@ -34,13 +34,24 @@ def show_epopch(env, n_actions, steps_target_per_episode, save_dir):
         coin = np.random.random()
 
         action = np.random.choice(n_actions)
-        action = int(input())
+        action = input("action: ")
+
+        try:
+            action = int(action)
+        except:
+            action = 1
+
 
         action_names = ["left", "stay", "right"]
         reward = env.act(actions[action])
 
         # print(f"player x position {state_array[0]:3d},   fruits x position {state_array[1]:3d},   fruits y position {state_array[2]:3d}, action {action_names[action]}, reward {reward}, score {env.score()} ")
-        print(f"player x position {int(state_array[0])}, line 1 y position {state_array[1]:.2f}, line 2 y position {state_array[2]:.2f}, line 3 y position {state_array[3]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()} ")
+        # print(f"player x position {int(state_array[0])}, line 1 y position {state_array[1]:.2f}, line 2 y position {state_array[2]:.2f}, line 3 y position {state_array[3]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()} ")
+        print(f"player x position {int(state_array[0])}, "
+              f"line 1 y position {state_array[1]:.2f}, line 1 vel {state_array[2]:.2f}, "
+              f"line 2 y position {state_array[3]:.2f}, line 2 vel {state_array[4]:.2f},"
+              f"line 3 y position {state_array[5]:.2f}, line 3 vel {state_array[6]:.2f}, action {action_names[action]}, reward {reward}, score {env.score()}")
+
 
         if env.game_over():
             break
@@ -66,8 +77,8 @@ def main():
 
 
 
-    save_dir = "./avoider_phase_1_v_0"
-    game = Avoider_v_0(width=512, height=512, init_lives=1)
+    save_dir = "./avoider_phase_1_v_1"
+    game = Avoider_v_1(width=512, height=512, init_lives=1)
     env = PLE(game, display_screen=True, state_preprocessor=process_state)  # , force_fps=False, fps=2)
     show_epopch(env, n_actions, steps_target_per_episode, save_dir)
 
