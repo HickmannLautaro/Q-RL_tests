@@ -18,7 +18,7 @@ Made more simple and discrete.
 ![](avoider_phase_1_v_0_demo.gif)
 
 ## Specifications
-per step (independent of agents action) the fruit goes lower in the screen by the same amount (jump to next higher y coordinate). There is always one fruit present (sometimes it can't be seen since it is under the screen one step.)
+per step (independent of agents action) the obstacles go lower in the screen by the same amount (jump to next higher y coordinate). 
 1 live.
 ### State space:
 s = {s_1,s_2,s_3,s_4} with:
@@ -36,7 +36,7 @@ Has some bugs depending on velocity if crashes are detected
 ![](avoider_phase_1_v_1_demo.gif)
 
 ## Specifications
-per step (independent of agents action) the fruit goes lower in the screen by the same amount (jump to next higher y coordinate). There is always one fruit present (sometimes it can't be seen since it is under the screen one step.)
+per step (independent of agents action) the obstacles  go lower in the screen depending on their speed. 
 1 live.
 ### State space:
 s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
