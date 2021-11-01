@@ -19,7 +19,7 @@ Made more simple and discrete.
 ### Played by hand
 ![](avoider_phase_1_v_0_demo.gif)
 
-## Specifications
+### Specifications
 per step (independent of agents action) the obstacles go lower in the screen by the same amount (jump to next higher y coordinate). 
 1 live.
 ### State space:
@@ -41,7 +41,7 @@ Has some bugs depending on velocity if crashes are detected. If velocity is to h
 ### Played by hand
 ![](avoider_phase_1_v_1_demo.gif)
 
-## Specifications
+### Specifications
 per step (independent of agents action) the obstacles  go lower in the screen depending on their speed. 
 1 live.
 ### State space:
@@ -63,15 +63,15 @@ s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
 
 ### Played by hand
 ![](avoider_phase_3_v_1_demo.gif)
-
-## Specifications
+### Specifications
 * per step (independent of agents action) the obstacles go lower in the screen depending on their speed.
-* [x] 1 live.
-* [ ] Set max high velocity max_speed = (agent_height + obstacle_height)/dt - 1 should solve the problem.
-* [ ] Episode consists of one obstacle avoiding.
-* [ ] Min obstacle velocity is random.
-* [ ] Every agent action takes 3 steps.
-* [ ] Change obstacel number to 3.
+* 1 live.
+* Set max high velocity max_speed = (agent_height + obstacle_height)/dt - 1 should solve the collision not detected problem.
+* Episode consists of one obstacle avoiding.
+* Min obstacle velocity is random.
+* Change obstacle number to 3.
+* Every agent action takes 3 steps. (TODO: how to adapt this to the training, interference with visualization)
+
 ### State space:
 s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
 * s_1 ∈  {-1, 0, 1}={Left line, middle line, right lane} players x centre position.
