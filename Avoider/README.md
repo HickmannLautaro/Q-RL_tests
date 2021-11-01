@@ -13,6 +13,8 @@ Made more simple and discrete.
 
 
 ## phase 1 (v_0)
+<details>
+  <summary>Click to expand!</summary>
 
 ### Played by hand
 ![](avoider_phase_1_v_0_demo.gif)
@@ -27,13 +29,17 @@ s = {s_1,s_2,s_3,s_4} with:
 * s_3 ∈  {1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1} = {Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line} obstacle in second lane y centre position
 * s_4 ∈  {1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1} = {Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line} obstacle in third lane y centre position
 
+</details>
 
-## phase 2 (v_1)
- 
-Has some bugs depending on velocity if crashes are detected
+## phase 3 (v_1) (Phase 2 & 3 are merged in the sence that pahse 2 is a discretization of pahse 3)
+
+<details>
+  <summary>Click to expand!</summary>
+
+Has some bugs depending on velocity if crashes are detected. If velocity is to high it jumps over the agent and no collision is detected. Setting max high velocity (dt * max_speed)  < agent_height + obstacle_height should solve the problem.
 
 ### Played by hand
-![](avoider_phase_1_v_1_demo.gif)
+![](avoider_phase_2_v_1_demo.gif)
 
 ## Specifications
 per step (independent of agents action) the obstacles  go lower in the screen depending on their speed. 
@@ -49,6 +55,36 @@ s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
 * s_6 ∈  [-1.00 , 1.00] obstacle in third lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
 * s_7 ∈  [0.00 , 1.00] U [-1.00] obstacle in third lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
 
+</details>
+
+## phase 4 (v_1)
+<details>
+  <summary>Click to expand!</summary>
+
+### Played by hand
+![](avoider_phase_3_v_1_demo.gif)
+
+## Specifications
+* per step (independent of agents action) the obstacles go lower in the screen depending on their speed.
+* [x] 1 live.
+* [ ] Set max high velocity max_speed = (agent_height + obstacle_height)/dt - 1 should solve the problem.
+* [ ] Episode consists of one obstacle avoiding.
+* [ ] Min obstacle velocity is random.
+* [ ] Every agent action takes 3 steps.
+* [ ] Change obstacel number to 3.
+### State space:
+s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
+* s_1 ∈  {-1, 0, 1}={Left line, middle line, right lane} players x centre position.
+* s_2 ∈  [-1.00 , 1.00] obstacle in first lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_3 ∈  [0.00 , 1.00] U [-1.00] obstacle in first lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_4 ∈  [-1.00 , 1.00] obstacle in second lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_5 ∈  [0.00 , 1.00] U [-1.00] obstacle in second lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_6 ∈  [-1.00 , 1.00] obstacle in third lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_7 ∈  [0.00 , 1.00] U [-1.00] obstacle in third lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+
+-1.00 is the default value when no obstacle present in lane
+
+</details>
 
 
 # Common to all
