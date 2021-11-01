@@ -39,7 +39,7 @@ s = {s_1,s_2,s_3,s_4} with:
 Has some bugs depending on velocity if crashes are detected. If velocity is to high it jumps over the agent and no collision is detected. Setting max high velocity (dt * max_speed)  < agent_height + obstacle_height should solve the problem.
 
 ### Played by hand
-![](avoider_phase_2_v_1_demo.gif)
+![](avoider_phase_1_v_1_demo.gif)
 
 ## Specifications
 per step (independent of agents action) the obstacles  go lower in the screen depending on their speed. 
