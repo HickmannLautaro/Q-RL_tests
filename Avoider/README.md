@@ -7,29 +7,96 @@ Made more simple and discrete.
 * White rectangle is the Agent.
 * White vertical lines are used as line separation
 
-# phase 1 (v_0)
+## Notation
+- {n_1,n_2}: represents sets with elements n_1 and n_2  
+- \[n_1,n_2\]: represents interval of real numbers between n_1 and n_2
+
+
+## phase 1 (v_0)
+<details>
+  <summary>Click to expand!</summary>
 
 ### Played by hand
 ![](avoider_phase_1_v_0_demo.gif)
 
-## Specifications
-per step (independent of agents action) the fruit goes lower in the screen by the same amount (jump to next higher y coordinate). There is always one fruit present (sometimes it can't be seen since it is under the screen one step.)
+### Specifications
+per step (independent of agents action) the obstacles go lower in the screen by the same amount (jump to next higher y coordinate). 
 1 live.
 ### State space:
-s = [s_1,s_2,s_3,s_4] with:
-* s_1 ∈  [-1, 0, 1]=[Left line, middle line, right lane] players x centre position.
-* s_2 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in first lane y centre position
-* s_3 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in second lane y centre position
-* s_4 ∈  [1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1] = [Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line] obstacle in third lane y centre position
+s = {s_1,s_2,s_3,s_4} with:
+* s_1 ∈  {-1, 0, 1}={Left line, middle line, right lane} players x centre position.
+* s_2 ∈  {1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1} = {Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line} obstacle in first lane y centre position
+* s_3 ∈  {1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1} = {Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line} obstacle in second lane y centre position
+* s_4 ∈  {1.00 , 0.73 , 0.47, 0.20, 0.00, -0.27, -1} = {Top of the screen line, intermediate position 1, intermediate position 2, intermediate position 3, bottom of the screen (catcher position), under catcher i.e. the obstacle was avoided, no obstacle in line} obstacle in third lane y centre position
+
+</details>
+
+## phase 3 (v_1) (Phase 2 & 3 are merged in the sence that pahse 2 is a discretization of pahse 3)
+
+<details>
+  <summary>Click to expand!</summary>
+
+Has some bugs depending on velocity if crashes are detected. If velocity is to high it jumps over the agent and no collision is detected. Setting max high velocity (dt * max_speed)  < agent_height + obstacle_height should solve the problem.
+
+### Played by hand
+![](avoider_phase_1_v_1_demo.gif)
+
+### Specifications
+per step (independent of agents action) the obstacles  go lower in the screen depending on their speed. 
+1 live.
+### State space:
+s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
+* s_1 ∈  {-1, 0, 1}={Left line, middle line, right lane} players x centre position.
+-1.00 is the default value when no obstacle present in lane
+* s_2 ∈  [-1.00 , 1.00] obstacle in first lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_3 ∈  [0.00 , 1.00] U [-1.00] obstacle in first lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_4 ∈  [-1.00 , 1.00] obstacle in second lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_5 ∈  [0.00 , 1.00] U [-1.00] obstacle in second lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_6 ∈  [-1.00 , 1.00] obstacle in third lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_7 ∈  [0.00 , 1.00] U [-1.00] obstacle in third lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+
+</details>
+
+## phase 4 (v_1)
+<details>
+  <summary>Click to expand!</summary>
+
+### Played by hand
+![](avoider_phase_3_v_1_demo.gif)
+### Specifications
+* per step (independent of agents action) the obstacles go lower in the screen depending on their speed.
+* 1 live.
+* Set max high velocity max_speed = (agent_height + obstacle_height)/dt - 1 should solve the collision not detected problem.
+* Episode consists of one obstacle avoiding.
+* Min obstacle velocity is random.
+* Change obstacle number to 3.
+* Every agent action takes 3 steps. (TODO: how to adapt this to the training, interference with visualization)
+
+### State space:
+s = {s_1,s_2,s_3,s_4, s_5,s_6,s_7} with:
+* s_1 ∈  {-1, 0, 1}={Left line, middle line, right lane} players x centre position.
+* s_2 ∈  [-1.00 , 1.00] obstacle in first lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_3 ∈  [0.00 , 1.00] U [-1.00] obstacle in first lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_4 ∈  [-1.00 , 1.00] obstacle in second lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_5 ∈  [0.00 , 1.00] U [-1.00] obstacle in second lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+* s_6 ∈  [-1.00 , 1.00] obstacle in third lane y centre position (if more than one obstacle in line the nearest to the agent is measured) 
+* s_7 ∈  [0.00 , 1.00] U [-1.00] obstacle in third lane y velocity (if more than one obstacle in line the nearest to the agent is measured)
+
+-1.00 is the default value when no obstacle present in lane
+
+</details>
+
+
+# Common to all
 
 ### Action space:
-action_names = [left, stay (do nothing), right] coded as [97,None, 100]  
+action_names = {left, stay (do nothing), right} coded as {97,None, 100}  
  * left: (if possible) jump one line to the left
  * stay: stay in the same lane
  * right: (if possible) jump one line to the right
 
 ### rewards
-r ∈  [1.0,0.0,-10.0]
+r ∈  {1.0,0.0,-10.0}
 * 1 obstacle avoided (stone at same y position as agent but not same x position)
 * 0 not crashed and not avoided
 * -10 crashed into obstacle. Game Over
@@ -40,3 +107,5 @@ The variable `steps_per_episode` sets the maximal reward pro episode,  as `max_s
 If the episode cumulative reward averaged over the last 100 episodes is `≥ max_score * 0.98` for 100 consecutive episodes, stop training and set episode cumulative reward for the rest of the episodes to the average reward achieved until now.
 
 Train for `n` steps independent of results. With `n_q` for Quantum and `n_c` for classic experiments. 
+
+

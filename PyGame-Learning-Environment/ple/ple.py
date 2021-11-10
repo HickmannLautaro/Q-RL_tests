@@ -5,6 +5,7 @@ import sys
 import pygame
 from .games.base.pygamewrapper import PyGameWrapper
 
+
 class PLE(object):
     """
     ple.PLE(
@@ -112,7 +113,6 @@ class PLE(object):
         if reward_values:
             self.game.adjustRewards(reward_values)
 
-
         if isinstance(self.game, PyGameWrapper):
             if isinstance(rng, np.random.RandomState):
                 self.rng = rng
@@ -127,7 +127,7 @@ class PLE(object):
             from .games.base.doomwrapper import DoomWrapper
             if isinstance(self.game, DoomWrapper):
                 self.rng = rng
-        
+
         self.game.setRNG(self.rng)
         self.init()
 
@@ -164,7 +164,15 @@ class PLE(object):
         This method should be explicitly called.
         """
         self.game._setup()
-        self.game.init() #this is the games setup/init
+        self.game.init()  # this is the games setup/init
+
+    def draw_epoch_custom(self, epoch):
+        self.game.draw_epoch_custom(epoch)
+        self.game._draw_frame(True)
+        self.game._draw_frame(True)
+        self.game._draw_frame(True)
+
+
 
     def getActionSet(self):
         """
@@ -181,16 +189,16 @@ class PLE(object):
         """
         actions = self.game.actions
 
-        if (sys.version_info > (3, 0)): #python ver. 3
+        if (sys.version_info > (3, 0)):  # python ver. 3
             if isinstance(actions, dict) or isinstance(actions, dict_values):
                 actions = actions.values()
         else:
             if isinstance(actions, dict):
                 actions = actions.values()
 
-        actions = list(actions) #.values()
-        #print (actions)
-        #assert isinstance(actions, list), "actions is not a list"
+        actions = list(actions)  # .values()
+        # print (actions)
+        # assert isinstance(actions, list), "actions is not a list"
 
         if self.add_noop_action:
             actions.append(self.NOOP)
@@ -290,7 +298,7 @@ class PLE(object):
         """
         frame = self.getScreenRGB()
         frame = 0.21 * frame[:, :, 0] + 0.72 * \
-            frame[:, :, 1] + 0.07 * frame[:, :, 2]
+                frame[:, :, 1] + 0.07 * frame[:, :, 2]
         frame = np.round(frame).astype(np.uint8)
 
         return frame
