@@ -36,13 +36,14 @@ def convert_dict_to_str(expe):
     arg_mod = expe["name"]
     message_name = f"{project}/{arg_mod}/{name}"
     log_file = os.path.join("Saves", message_name)
-    args = [
-        ["--layers 32 32 --name Classic_32_32"],
-        ["--layers 64 --name Classic_64"],
-        ["--Quantum --n_layer 15 --name Quntum_15"],
-        ["--Quantum --n_layer 10 --name Quntum_10"],
-        ["--Quantum --n_layer 5  --name Quntum_5"],
-    ]
+    # args = [
+    #     ["--layers 32 32 --name Classic_32_32"],
+    #     ["--layers 64 --name Classic_64"],
+    #     ["--Quantum --n_layer 15 --name Quntum_15"],
+    #     ["--Quantum --n_layer 10 --name Quntum_10"],
+    #     ["--Quantum --n_layer 5  --name Quntum_5"],
+    # ]
+
     if expe["type"] == "Quantum":
         args = "--Quantum "
     else:
@@ -64,6 +65,12 @@ def run_expe(command):
     print(f"Now running: {command}")
     p = subprocess.Popen(command, shell=True)
     p.wait()
+
+    list_of_experiments_file = open("utils/parallel_script_tmp/list_of_experiments_file.json", "r")
+    list_of_experiments = json.loads(list_of_experiments_file.read())
+    list_of_experiments.remove(command)
+    save_list_to_file(list_of_experiments)
+
     return command
 
 
@@ -74,29 +81,42 @@ def main():
     except:
         list_of_experiments = []
     args = get_parsed()
+    # configs = [
+    #     [{"type": "Quantum", "n_layer": "15", "name": "Quantum_15"}, [1, 6]],
+    #     [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10"}, [1, 6]],
+    #     [{"type": "Quantum", "n_layer": "5", "name": "Quantum_5"}, [1, 6]],
+    #     [{"type": "Classic", "layers": "32 32", "name": "Classic_32_32"}, [1, 6]],
+    #     [{"type": "Classic", "layers": "64", "name": "Classic_64"}, [1, 6]],
+    # ]
+
     configs = [
-        [{"type": "Quantum", "n_layer": "15", "name": "Quantum_15"}, [1, 6]],
-        [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10"}, [1, 6]],
-        [{"type": "Quantum", "n_layer": "5", "name": "Quantum_5"}, [1, 6]],
-        [{"type": "Classic", "layers": "32 32", "name": "Classic_32_32"}, [1, 6]],
-        [{"type": "Classic", "layers": "64", "name": "Classic_64"}, [1, 6]],
+        # [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10_analytical"}, [1, 2]],
+        [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10_sampled_5000", "Shots": "5000"}, [2, 6]],
+        # [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10_sampled_1000", "Shots": "1000"}, [1, 6]],
+        # [{"type": "Quantum", "n_layer": "10", "name": "Quantum_10_sampled_100", "Shots": "100"}, [1, 6]],
     ]
 
     processes = args["parallel"]
 
     myorder = []
-    if len(list_of_experiments) > 2 and not args["start_new"]:
+    if len(list_of_experiments) > 0 and not args["start_new"]:
         print("Resuming last experiment list")
     else:
         print("Starting new experiment list")
         list_of_experiments = []
 
         count = 0
+        count_old= 0
+        indices = []
         for c in configs:
             count += c[1][1] - c[1][0]
+            indices.append(np.arange(count_old, count).tolist())
+            count_old= count
 
-        for i,c in enumerate(configs):
-            myorder += np.arange(i, count,  c[1][1] - c[1][0]).tolist()
+        while np.sum(indices) != 0.0:
+            for c in indices:
+                if len(c)>0:
+                    myorder += [c.pop(0)]
 
         for config in configs:
             for run in range(config[1][0], config[1][1]):
@@ -136,11 +156,13 @@ def main():
 
     # TODO See how to remove element when run is finished without waiting for parallel runs to finish.
     for result in pool.imap(run_expe, list_of_experiments):
-        list_of_experiments_file = open("utils/parallel_script_tmp/list_of_experiments_file.json", "r")
-        list_of_experiments = json.loads(list_of_experiments_file.read())
-        list_of_experiments.remove(result)
-        save_list_to_file(list_of_experiments)
+        # list_of_experiments_file = open("utils/parallel_script_tmp/list_of_experiments_file.json", "r")
+        # list_of_experiments = json.loads(list_of_experiments_file.read())
+        # list_of_experiments.remove(result)
+        # save_list_to_file(list_of_experiments)
+        result
 
+    print("All done")
 
 
 if __name__ == "__main__":

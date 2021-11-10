@@ -161,7 +161,7 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         by the ControlledPQC.
     """
 
-    def __init__(self, qubits, n_layers, observables, activation="linear", name="re-uploading_PQC"):
+    def __init__(self, qubits, n_layers, observables,repetitions, activation="linear", name="re-uploading_PQC"):
         super(ReUploadingPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
@@ -185,7 +185,7 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         self.activation = activation
         self.empty_circuit = tfq.convert_to_tensor([cirq.Circuit()])
 
-        self.computation_layer = tfq.layers.ControlledPQC(circuit, observables)
+        self.computation_layer = tfq.layers.ControlledPQC(circuit, observables, repetitions=repetitions)
 
     def call(self, inputs):
         # inputs[0] = encoding data for the state.
@@ -213,11 +213,11 @@ class Rescaling(tf.keras.layers.Layer):
         return tf.math.multiply((inputs + 1) / 2, tf.repeat(self.w, repeats=tf.shape(inputs)[0], axis=0))
 
 
-def generate_model_Qlearning(qubits, n_layers, n_actions, observables, target):
+def generate_model_Qlearning(qubits, n_layers, repetitions, observables, target):
     """Generates a Keras model for a data re-uploading PQC Q-function approximator."""
 
     input_tensor = tf.keras.Input(shape=(len(qubits),), dtype=tf.dtypes.float32, name='input')
-    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, activation='tanh')([input_tensor])
+    re_uploading_pqc = ReUploadingPQC(qubits, n_layers, observables, repetitions=repetitions, activation='tanh')([input_tensor])
     process = tf.keras.Sequential([Rescaling(len(observables))], name=target * "Target" + "Q-values")
     Q_values = process(re_uploading_pqc)
     model = tf.keras.Model(inputs=[input_tensor], outputs=Q_values)
@@ -330,6 +330,7 @@ def get_parsed():
     parser = argparse.ArgumentParser(description="Define and run the experiment with one config")
     parser.add_argument('--run', '-r', type=int, help="Run iteration")
     parser.add_argument('--Quantum', '-Q', action="store_true", default=False, help="True: Quantum model, False (default) classic model")
+    parser.add_argument('--Shots', '-Sh', type=int, default=None, help="Shots for sampling")
     parser.add_argument('--n_layers', '-Ql', type=int, help=" number of layers for the Quantum model")
     parser.add_argument('--layers', '-l', nargs='+', type=int, help=" number of layers for the Classic model. for example 32 16 means 2 layers with first one with 32 neurons second with 16 neurons")
     parser.add_argument('--name', '-n', type=str, help="name of the experiment")
@@ -382,17 +383,22 @@ def main():
     n_state = 3  # Dimension of the state vectors in CartPole
     n_actions = 3  # Number of actions in CartPole
 
+    shots = arguments['Shots'] #For analytical running this is None (default) otherwise sampling repetitions
+
+
     if Quantum:
         n_qubits = 3  # Dimension of the state vectors in CartPole     [player x position,   fruits x position,   fruits y position]
         n_layers = arguments["n_layers"]  # 10 #15 # Number of layers in the PQC
         qubits = cirq.GridQubit.rect(1, n_qubits)
         ops = [cirq.Z(q) for q in qubits]
         observables = [ops[0], ops[1], ops[2]]  # Z_0*Z_1 for action 0 and Z_2*Z_3 for action 1
-        model = generate_model_Qlearning(qubits, n_layers, n_actions, observables, False)
-        model_target = generate_model_Qlearning(qubits, n_layers, n_actions, observables, True)
+        model = generate_model_Qlearning(qubits, n_layers, shots, observables, False)
+        model_target = generate_model_Qlearning(qubits, n_layers, shots, observables, True)
         batch_size = 16
         steps_per_update = 10  # Train the model every x steps
         steps_per_target_update = 30  # Update the target model every x steps
+
+
 
     else:
         layers = arguments["layers"]  # [32, 32]  # layers = [9, 4] layers = [64] layers = [13] layers = [32, 32]
@@ -445,7 +451,8 @@ def main():
             "training_stop_percent": training_stop_percent,
             "run": arguments['run'],
             "name": arg_mod + "_" + name,
-            "group": arg_mod
+            "group": arg_mod,
+            "shots": shots
         }
 
     else:
