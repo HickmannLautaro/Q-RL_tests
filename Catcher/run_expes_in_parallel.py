@@ -146,7 +146,7 @@ def main():
     #     save_list_to_file(list_of_experiments[i + processes:])
     save_list_to_file(list_of_experiments)
 
-    pool = multiprocessing.Pool(processes=2)
+    pool = multiprocessing.Pool(processes=processes)
     print("-" * 100, "\nStarting experiments \n")
 
     '''run experiments in parallel depending on Pool(processes) and when all (n parallel processes) return removes the items from the json list.
@@ -160,7 +160,7 @@ def main():
         # list_of_experiments = json.loads(list_of_experiments_file.read())
         # list_of_experiments.remove(result)
         # save_list_to_file(list_of_experiments)
-        result
+        pass
 
     print("All done")
 
